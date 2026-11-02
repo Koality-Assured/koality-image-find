@@ -1,7 +1,6 @@
 package indexer
 
 import (
-	"bytes"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -233,11 +232,58 @@ func (idx *Indexer) GetByPath(path string) (ItemView, bool) {
 	}, true
 }
 
+// containsFoldASCII tests whether substr is within s case-insensitively with ZERO heap allocations.
+func containsFoldASCII(s, substr []byte) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(s) < len(substr) {
+		return false
+	}
+	sub0 := substr[0]
+	if sub0 >= 'A' && sub0 <= 'Z' {
+		sub0 += 'a' - 'A'
+	}
+
+	for i := 0; i <= len(s)-len(substr); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if c != sub0 {
+			continue
+		}
+
+		match := true
+		for j := 1; j < len(substr); j++ {
+			c1 := s[i+j]
+			c2 := substr[j]
+			if c1 >= 'A' && c1 <= 'Z' {
+				c1 += 'a' - 'A'
+			}
+			if c2 >= 'A' && c2 <= 'Z' {
+				c2 += 'a' - 'A'
+			}
+			if c1 != c2 {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
 // SearchAndSort executes parallel filtering and multi-column sorting.
 func (idx *Indexer) SearchAndSort(q Query, s SortConfig) []uint32 {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
+	return idx.searchAndSortLocked(q, s)
+}
 
+func (idx *Indexer) searchAndSortLocked(q Query, s SortConfig) []uint32 {
 	n := len(idx.records)
 	if n == 0 {
 		return nil
@@ -306,13 +352,12 @@ func (idx *Indexer) SearchAndSort(q Query, s SortConfig) []uint32 {
 					}
 				}
 
-				// Search substring filter
+				// Search substring filter (zero allocation!)
 				if len(searchBytes) > 0 {
 					nameBytes := idx.stringPool[r.NameOffset : r.NameOffset+uint32(r.NameLen)]
-					if !bytes.Contains(bytes.ToLower(nameBytes), searchBytes) {
-						// Also check path
+					if !containsFoldASCII(nameBytes, searchBytes) {
 						pathBytes := idx.stringPool[r.PathOffset : r.PathOffset+uint32(r.PathLen)]
-						if !bytes.Contains(bytes.ToLower(pathBytes), searchBytes) {
+						if !containsFoldASCII(pathBytes, searchBytes) {
 							continue
 						}
 					}
@@ -375,7 +420,10 @@ func (idx *Indexer) SearchAndSort(q Query, s SortConfig) []uint32 {
 
 // GetPage returns a virtual cursor page of items for the viewport.
 func (idx *Indexer) GetPage(q Query, s SortConfig, offset int, limit int) PageResult {
-	matchedIndices := idx.SearchAndSort(q, s)
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	matchedIndices := idx.searchAndSortLocked(q, s)
 	total := len(matchedIndices)
 
 	if offset < 0 {
@@ -393,9 +441,6 @@ func (idx *Indexer) GetPage(q Query, s SortConfig, offset int, limit int) PageRe
 	if end > total {
 		end = total
 	}
-
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
 
 	items := make([]ItemView, 0, end-start)
 	for i := start; i < end; i++ {

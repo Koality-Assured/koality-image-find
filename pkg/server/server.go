@@ -4,15 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"io"
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -139,9 +137,12 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		// Origin header check (if present)
 		origin := r.Header.Get("Origin")
-		if origin != "" && !strings.Contains(origin, "127.0.0.1") && !strings.Contains(origin, "localhost") {
-			http.Error(w, `{"error":"forbidden: origin not allowed"}`, http.StatusForbidden)
-			return
+		if origin != "" {
+			u, err := url.Parse(origin)
+			if err != nil || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost" && u.Hostname() != "::1") {
+				http.Error(w, `{"error":"forbidden: origin not allowed"}`, http.StatusForbidden)
+				return
+			}
 		}
 
 		next(w, r)
@@ -305,7 +306,7 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 
 	// Security: Whitelist path check against disk
 	cleanPath := filepath.Clean(item.Path)
-	file, err := os.Open(cleanPath)
+	file, err := os.Open(winapi.ToExtendedPath(cleanPath))
 	if err != nil {
 		http.Error(w, "file unreadable", http.StatusNotFound)
 		return
@@ -372,9 +373,9 @@ func (s *Server) handleActionOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security: Verify that file extension is an allowed media type before executing
-	_, normExt := scanner.ClassifyExtension(item.Ext)
-	if normExt == "" || normExt == ".exe" || normExt == ".bat" || normExt == ".cmd" || normExt == ".ps1" {
+	// Security: Whitelist allowed media types only before executing
+	mediaType, _ := scanner.ClassifyExtension(item.Ext)
+	if mediaType != scanner.MediaTypeImage && mediaType != scanner.MediaTypeVideo {
 		http.Error(w, "prohibited file type", http.StatusForbidden)
 		return
 	}
@@ -388,23 +389,3 @@ func (s *Server) handleActionOpen(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
-
-// CopyFile copies a file for test setups.
-func CopyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	return err
-}
-
-var ErrNotFound = errors.New("not found")

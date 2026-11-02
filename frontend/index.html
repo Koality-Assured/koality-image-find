@@ -849,16 +849,26 @@
 
         card.appendChild(thumbWrap);
 
-        // Meta info
+        // Meta info (safe DOM assignment, zero XSS risk)
         const meta = document.createElement('div');
         meta.className = 'card-meta';
-        meta.innerHTML = `
-          <div class="card-title" title="${item.name}">${item.name}</div>
-          <div class="card-sub">
-            <span>${formatBytes(item.size)}</span>
-            <span>${formatDate(item.modTime).split(' ')[0]}</span>
-          </div>
-        `;
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'card-title';
+        titleDiv.title = item.name;
+        titleDiv.textContent = item.name;
+
+        const subDiv = document.createElement('div');
+        subDiv.className = 'card-sub';
+        const sizeSpan = document.createElement('span');
+        sizeSpan.textContent = formatBytes(item.size);
+        const dateSpan = document.createElement('span');
+        dateSpan.textContent = formatDate(item.modTime).split(' ')[0];
+        subDiv.appendChild(sizeSpan);
+        subDiv.appendChild(dateSpan);
+
+        meta.appendChild(titleDiv);
+        meta.appendChild(subDiv);
         card.appendChild(meta);
 
         fragment.appendChild(card);

@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"sync"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 var (
@@ -39,7 +42,7 @@ func HasFFmpeg() bool {
 	return ffmpegPath != ""
 }
 
-// ExtractVideoFrameFFmpeg extracts a frame from a video file at 2 seconds using ffmpeg pipe streaming.
+// ExtractVideoFrameFFmpeg extracts a frame from a video file using ffmpeg pipe streaming.
 func ExtractVideoFrameFFmpeg(videoPath string, size int, timeout time.Duration) ([]byte, error) {
 	if !HasFFmpeg() {
 		return nil, errors.New("ffmpeg not found in PATH")
@@ -52,15 +55,24 @@ func ExtractVideoFrameFFmpeg(videoPath string, size int, timeout time.Duration) 
 		size = 256
 	}
 
+	// scale=size:-2 ensures width is `size` and height is even (avoiding MJPEG encoder failure)
+	scaleFilter := fmt.Sprintf("scale=%d:-2:flags=fast_bilinear", size)
+
 	cmd := exec.CommandContext(ctx, ffmpegPath,
-		"-ss", "00:00:02",
+		"-ss", "00:00:00.500", // 500ms seek works for short clips
 		"-i", videoPath,
 		"-vframes", "1",
-		"-vf", "scale=256:-1:flags=fast_bilinear",
+		"-vf", scaleFilter,
 		"-f", "image2pipe",
 		"-vcodec", "mjpeg",
 		"-",
 	)
+
+	// Suppress console window flashing on Windows
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

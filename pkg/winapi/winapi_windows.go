@@ -294,6 +294,27 @@ func OpenFolderAndSelectItem(fullPath string) error {
 	return nil
 }
 
+// SHCreateItemFromParsingName creates a shell item object from a standard path.
+func SHCreateItemFromParsingName(path string, riid *windows.GUID, ppv *uintptr) error {
+	// Shell APIs require standard clean paths, NOT \\?\ extended paths
+	cleanPath := FromExtendedPath(filepath.Clean(path))
+	pathPtr, err := syscall.UTF16PtrFromString(cleanPath)
+	if err != nil {
+		return err
+	}
+
+	r0, _, _ := procSHCreateItemFromParsing.Call(
+		uintptr(unsafe.Pointer(pathPtr)),
+		0,
+		uintptr(unsafe.Pointer(riid)),
+		uintptr(unsafe.Pointer(ppv)),
+	)
+	if int32(r0) < 0 || *ppv == 0 {
+		return syscall.Errno(r0)
+	}
+	return nil
+}
+
 // ShellExecute runs a file or command via ShellExecuteExW.
 func ShellExecute(hwnd uintptr, verb, file, params, dir string, showCmd int32) error {
 	verbPtr, _ := syscall.UTF16PtrFromString(verb)
@@ -316,12 +337,12 @@ func ShellExecute(hwnd uintptr, verb, file, params, dir string, showCmd int32) e
 		HkeyClass    uintptr
 		DwHotKey     uint32
 		HIcon        uintptr
-		HProcess     uintptr
+		HProcess     windows.Handle
 	}
 
 	info := SHELLEXECUTEINFOW{
 		CbSize:       uint32(unsafe.Sizeof(SHELLEXECUTEINFOW{})),
-		FMask:        0x00000040, // SEE_MASK_FLAG_NO_UI
+		FMask:        0x00000400, // SEE_MASK_FLAG_NO_UI (0x400, NOT 0x40 which leaks hProcess)
 		Hwnd:         hwnd,
 		LpVerb:       verbPtr,
 		LpFile:       filePtr,
@@ -333,6 +354,9 @@ func ShellExecute(hwnd uintptr, verb, file, params, dir string, showCmd int32) e
 	r0, _, errCode := procShellExecuteExW.Call(uintptr(unsafe.Pointer(&info)))
 	if r0 == 0 {
 		return errCode
+	}
+	if info.HProcess != 0 && info.HProcess != windows.InvalidHandle {
+		_ = windows.CloseHandle(info.HProcess)
 	}
 	return nil
 }

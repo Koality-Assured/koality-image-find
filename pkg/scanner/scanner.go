@@ -40,6 +40,58 @@ func New(config ScannerConfig) *Scanner {
 	return &Scanner{config: config}
 }
 
+// unboundedDirQueue is a non-blocking FIFO queue that prevents producer-consumer deadlocks.
+type unboundedDirQueue struct {
+	mu     sync.Mutex
+	cond   *sync.Cond
+	items  []string
+	closed bool
+}
+
+func newDirQueue() *unboundedDirQueue {
+	q := &unboundedDirQueue{
+		items: make([]string, 0, 10000),
+	}
+	q.cond = sync.NewCond(&q.mu)
+	return q
+}
+
+func (q *unboundedDirQueue) push(dir string) {
+	q.mu.Lock()
+	if !q.closed {
+		q.items = append(q.items, dir)
+		q.cond.Signal()
+	}
+	q.mu.Unlock()
+}
+
+func (q *unboundedDirQueue) pop(ctx context.Context) (string, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	for len(q.items) == 0 && !q.closed {
+		if ctx.Err() != nil {
+			return "", false
+		}
+		q.cond.Wait()
+	}
+
+	if len(q.items) == 0 || q.closed {
+		return "", false
+	}
+
+	item := q.items[0]
+	q.items = q.items[1:]
+	return item, true
+}
+
+func (q *unboundedDirQueue) close() {
+	q.mu.Lock()
+	q.closed = true
+	q.cond.Broadcast()
+	q.mu.Unlock()
+}
+
 // Scan executes the file scan across all configured roots and delivers batches of MediaFile.
 func (s *Scanner) Scan(ctx context.Context, onBatch func([]MediaFile)) (ScanStats, error) {
 	startTime := time.Now()
@@ -51,8 +103,13 @@ func (s *Scanner) Scan(ctx context.Context, onBatch func([]MediaFile)) (ScanStat
 		pendingDirs    atomic.Int64
 	)
 
-	// Directory work queue with large buffer
-	dirChan := make(chan string, 100000)
+	queue := newDirQueue()
+
+	// Broadcast condition on context cancellation to unblock waiting workers
+	go func() {
+		<-ctx.Done()
+		queue.close()
+	}()
 
 	// Batch collector channel
 	fileChan := make(chan MediaFile, 5000)
@@ -109,81 +166,76 @@ func (s *Scanner) Scan(ctx context.Context, onBatch func([]MediaFile)) (ScanStat
 			var findData winapi.Win32FindData
 
 			for {
-				select {
-				case <-ctx.Done():
+				if ctx.Err() != nil {
 					return
-				case dir, ok := <-dirChan:
-					if !ok {
-						return
+				}
+
+				dir, ok := queue.pop(ctx)
+				if !ok {
+					return
+				}
+
+				foldersScanned.Add(1)
+				searchPattern := filepath.Join(dir, "*")
+
+				hFind, err := winapi.FindFirstFileEx(searchPattern, &findData)
+				if err != nil || hFind == windows.InvalidHandle {
+					errorsCount.Add(1)
+					if pendingDirs.Add(-1) == 0 {
+						queue.close()
 					}
+					continue
+				}
 
-					foldersScanned.Add(1)
-					searchPattern := filepath.Join(dir, "*")
+				for {
+					name := findData.NameString()
 
-					hFind, err := winapi.FindFirstFileEx(searchPattern, &findData)
-					if err != nil || hFind == windows.InvalidHandle {
-						errorsCount.Add(1)
-						if pendingDirs.Add(-1) == 0 {
-							close(dirChan)
+					if findData.IsDirectory() {
+						if !findData.IsSkipDirectory(name) {
+							subDir := filepath.Join(dir, name)
+							pendingDirs.Add(1)
+							queue.push(subDir)
 						}
-						continue
-					}
+					} else {
+						// Regular file
+						ext := filepath.Ext(name)
+						mediaType, normExt := ClassifyExtension(ext)
+						if mediaType != MediaTypeUnknown {
+							isCloud := findData.IsCloudPlaceholder()
+							if !isCloud || s.config.IncludeCloud {
+								if mediaType == MediaTypeImage {
+									imagesFound.Add(1)
+								} else if mediaType == MediaTypeVideo {
+									videosFound.Add(1)
+								}
 
-					for {
-						name := findData.NameString()
-
-						if findData.IsDirectory() {
-							if !findData.IsSkipDirectory(name) {
-								subDir := filepath.Join(dir, name)
-								pendingDirs.Add(1)
 								select {
-								case dirChan <- subDir:
+								case fileChan <- MediaFile{
+									Path:      filepath.Join(dir, name),
+									Name:      name,
+									Ext:       normExt,
+									MediaType: mediaType,
+									Size:      findData.FileSize(),
+									ModTime:   findData.ModTime(),
+									IsCloud:   isCloud,
+								}:
 								case <-ctx.Done():
 									winapi.FindClose(hFind)
 									return
 								}
 							}
-						} else {
-							// Regular file
-							ext := filepath.Ext(name)
-							mediaType, normExt := ClassifyExtension(ext)
-							if mediaType != MediaTypeUnknown {
-								isCloud := findData.IsCloudPlaceholder()
-								if !isCloud || s.config.IncludeCloud {
-									if mediaType == MediaTypeImage {
-										imagesFound.Add(1)
-									} else if mediaType == MediaTypeVideo {
-										videosFound.Add(1)
-									}
-
-									select {
-									case fileChan <- MediaFile{
-										Path:      filepath.Join(dir, name),
-										Name:      name,
-										Ext:       normExt,
-										MediaType: mediaType,
-										Size:      findData.FileSize(),
-										ModTime:   findData.ModTime(),
-										IsCloud:   isCloud,
-									}:
-									case <-ctx.Done():
-										winapi.FindClose(hFind)
-										return
-									}
-								}
-							}
-						}
-
-						if !winapi.FindNextFile(hFind, &findData) {
-							break
 						}
 					}
 
-					winapi.FindClose(hFind)
-
-					if pendingDirs.Add(-1) == 0 {
-						close(dirChan)
+					if !winapi.FindNextFile(hFind, &findData) {
+						break
 					}
+				}
+
+				winapi.FindClose(hFind)
+
+				if pendingDirs.Add(-1) == 0 {
+					queue.close()
 				}
 			}
 		}()
@@ -198,11 +250,11 @@ func (s *Scanner) Scan(ctx context.Context, onBatch func([]MediaFile)) (ScanStat
 		cleanRoot := filepath.Clean(root)
 		pendingDirs.Add(1)
 		validRoots++
-		dirChan <- cleanRoot
+		queue.push(cleanRoot)
 	}
 
 	if validRoots == 0 {
-		close(dirChan)
+		queue.close()
 	}
 
 	// Wait for workers to finish

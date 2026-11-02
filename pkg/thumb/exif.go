@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"os"
+
+	"github.com/Koality-Assured/koality-image-find/pkg/winapi"
 )
 
 var (
@@ -19,7 +21,7 @@ var (
 // from the first 64KB of a JPEG or RAW file.
 // Returns the raw JPEG bytes of the embedded thumbnail if present.
 func ExtractExifThumbnail(filePath string) ([]byte, error) {
-	f, err := os.Open(filePath)
+	f, err := os.Open(winapi.ToExtendedPath(filePath))
 	if err != nil {
 		return nil, err
 	}
@@ -53,8 +55,14 @@ func ExtractExifThumbnail(filePath string) ([]byte, error) {
 		if marker == 0xE1 {
 			// Found APP1
 			length := int(binary.BigEndian.Uint16(buf[pos+2 : pos+4]))
+			if length < 2 {
+				return nil, errInvalidExif
+			}
 			if pos+2+length > len(buf) {
 				length = len(buf) - (pos + 2)
+			}
+			if length < 2 {
+				return nil, errInvalidExif
 			}
 			app1Data = buf[pos+4 : pos+2+length]
 			break
@@ -142,9 +150,9 @@ func ExtractExifThumbnail(filePath string) ([]byte, error) {
 		}
 
 		thumbBuf := make([]byte, thumbLen)
-		_, err := f.ReadAt(thumbBuf, app1FilePos)
-		if err != nil && err != io.EOF {
-			return nil, err
+		n, err := f.ReadAt(thumbBuf, app1FilePos)
+		if (err != nil && err != io.EOF) || n < thumbLen {
+			return nil, errMalformedThumb
 		}
 		if len(thumbBuf) >= 2 && thumbBuf[0] == 0xFF && thumbBuf[1] == 0xD8 {
 			return thumbBuf, nil

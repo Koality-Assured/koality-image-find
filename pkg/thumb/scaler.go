@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 
+	"github.com/Koality-Assured/koality-image-find/pkg/winapi"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/webp"
 )
@@ -29,7 +30,7 @@ const (
 // DecodeAndScaleImage decodes an image with decompression-bomb protection and downscales it to fit
 // within targetW x targetH while preserving aspect ratio.
 func DecodeAndScaleImage(filePath string, targetW, targetH int) ([]byte, error) {
-	f, err := os.Open(filePath)
+	f, err := os.Open(winapi.ToExtendedPath(filePath))
 	if err != nil {
 		return nil, err
 	}

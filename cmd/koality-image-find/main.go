@@ -26,6 +26,8 @@ import (
 var (
 	currentScanStats scanner.ScanStats
 	statsMu          sync.RWMutex
+	scanMu           sync.Mutex
+	currentCancel    context.CancelFunc
 )
 
 func main() {
@@ -105,11 +107,15 @@ func main() {
 	// Static filesystem from frontend package
 	staticFS := frontend.DistFS
 
-	// Create scan manager function
-	scanCtx, cancelScan := context.WithCancel(context.Background())
-	defer cancelScan()
-
 	startScan := func(targetRoots []string) {
+		scanMu.Lock()
+		if currentCancel != nil {
+			currentCancel()
+		}
+		scanCtx, cancel := context.WithCancel(context.Background())
+		currentCancel = cancel
+		scanMu.Unlock()
+
 		go func() {
 			log.Printf("[Scanner] Starting traversal across %d roots...\n", len(targetRoots))
 			s := scanner.New(scanner.ScannerConfig{
@@ -179,7 +185,11 @@ func main() {
 	<-sigChan
 
 	log.Println("[Shutdown] Gracefully closing resources...")
-	cancelScan()
+	scanMu.Lock()
+	if currentCancel != nil {
+		currentCancel()
+	}
+	scanMu.Unlock()
 }
 
 // launchDesktopWindow launches Microsoft Edge in --app mode or falls back to system browser.

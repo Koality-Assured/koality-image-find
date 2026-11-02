@@ -148,6 +148,12 @@ func NewShellWorkerPool(numWorkers int) *ShellWorkerPool {
 	return p
 }
 
+// Close terminates the worker pool cleanly.
+func (p *ShellWorkerPool) Close() {
+	close(p.stop)
+	p.wg.Wait()
+}
+
 func (p *ShellWorkerPool) workerLoop() {
 	defer p.wg.Done()
 
@@ -223,23 +229,10 @@ func pumpMessages() {
 
 // extractViaShellCOM extracts thumbnail using IShellItemImageFactory.
 func extractViaShellCOM(filePath string, size int) ([]byte, error) {
-	pathPtr, err := syscall.UTF16PtrFromString(winapi.ToExtendedPath(filePath))
-	if err != nil {
-		return nil, err
-	}
-
-	modshell32 := windows.NewLazySystemDLL("shell32.dll")
-	procSHCreateItemFromParsing := modshell32.NewProc("SHCreateItemFromParsingName")
-
 	var pItem uintptr
-	r0, _, _ := procSHCreateItemFromParsing.Call(
-		uintptr(unsafe.Pointer(pathPtr)),
-		0,
-		uintptr(unsafe.Pointer(&iidIShellItemImageFactory)),
-		uintptr(unsafe.Pointer(&pItem)),
-	)
-	if int32(r0) < 0 || pItem == 0 {
-		return nil, errors.New("SHCreateItemFromParsingName failed")
+	err := winapi.SHCreateItemFromParsingName(filePath, &iidIShellItemImageFactory, &pItem)
+	if err != nil || pItem == 0 {
+		return nil, errors.New("SHCreateItemFromParsingName failed: " + err.Error())
 	}
 
 	// IShellItemImageFactory VTable:
