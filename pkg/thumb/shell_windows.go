@@ -90,6 +90,17 @@ type BITMAPINFO struct {
 	Colors [1]uint32
 }
 
+type iShellItemImageFactoryVtbl struct {
+	QueryInterface uintptr
+	AddRef         uintptr
+	Release        uintptr
+	GetImage       uintptr
+}
+
+type iShellItemImageFactory struct {
+	vtbl *iShellItemImageFactoryVtbl
+}
+
 type MSG struct {
 	Hwnd     uintptr
 	Message  uint32
@@ -108,6 +119,7 @@ type shellRequest struct {
 
 type shellResponse struct {
 	data []byte
+	hash uint64
 	err  error
 }
 
@@ -178,8 +190,8 @@ func (p *ShellWorkerPool) workerLoop() {
 			if !ok {
 				return
 			}
-			data, err := extractViaShellCOM(req.filePath, req.size)
-			req.resp <- shellResponse{data: data, err: err}
+			data, hash, err := extractViaShellCOM(req.filePath, req.size)
+			req.resp <- shellResponse{data: data, hash: hash, err: err}
 			pumpMessages()
 		}
 	}
@@ -187,6 +199,12 @@ func (p *ShellWorkerPool) workerLoop() {
 
 // ExtractThumbnail requests a thumbnail from the STA worker pool.
 func (p *ShellWorkerPool) ExtractThumbnail(filePath string, size int, timeout time.Duration) ([]byte, error) {
+	data, _, err := p.ExtractThumbnailWithHash(filePath, size, timeout)
+	return data, err
+}
+
+// ExtractThumbnailWithHash requests thumbnail bytes and 64-bit dHash from the STA worker pool.
+func (p *ShellWorkerPool) ExtractThumbnailWithHash(filePath string, size int, timeout time.Duration) ([]byte, uint64, error) {
 	respChan := make(chan shellResponse, 1)
 	req := shellRequest{
 		filePath: filePath,
@@ -197,14 +215,14 @@ func (p *ShellWorkerPool) ExtractThumbnail(filePath string, size int, timeout ti
 	select {
 	case p.reqChan <- req:
 	case <-time.After(timeout):
-		return nil, errors.New("shell worker pool request timed out")
+		return nil, 0, errors.New("shell worker pool request timed out")
 	}
 
 	select {
 	case res := <-respChan:
-		return res.data, res.err
+		return res.data, res.hash, res.err
 	case <-time.After(timeout):
-		return nil, errors.New("shell worker execution timed out")
+		return nil, 0, errors.New("shell worker execution timed out")
 	}
 }
 
@@ -227,24 +245,19 @@ func pumpMessages() {
 	}
 }
 
-// extractViaShellCOM extracts thumbnail using IShellItemImageFactory.
-func extractViaShellCOM(filePath string, size int) ([]byte, error) {
-	var pItem uintptr
-	err := winapi.SHCreateItemFromParsingName(filePath, &iidIShellItemImageFactory, &pItem)
-	if err != nil || pItem == 0 {
-		return nil, errors.New("SHCreateItemFromParsingName failed: " + err.Error())
+// extractViaShellCOM extracts thumbnail using IShellItemImageFactory and computes dHash.
+func extractViaShellCOM(filePath string, size int) ([]byte, uint64, error) {
+	var item *iShellItemImageFactory
+	err := winapi.SHCreateItemFromParsingName(filePath, &iidIShellItemImageFactory, unsafe.Pointer(&item))
+	if err != nil || item == nil {
+		if err != nil {
+			return nil, 0, errors.New("SHCreateItemFromParsingName failed: " + err.Error())
+		}
+		return nil, 0, errors.New("SHCreateItemFromParsingName returned nil item")
 	}
 
-	// IShellItemImageFactory VTable:
-	// 0: QueryInterface
-	// 1: AddRef
-	// 2: Release
-	// 3: GetImage(SIZE size, SIIGBF flags, HBITMAP *phbm)
-	vtable := *(**uintptr)(unsafe.Pointer(pItem))
-	procRelease := *(*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(vtable)) + 2*unsafe.Sizeof(uintptr(0))))
-	procGetImage := *(*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(vtable)) + 3*unsafe.Sizeof(uintptr(0))))
-
-	defer syscall.SyscallN(procRelease, pItem)
+	pItem := uintptr(unsafe.Pointer(item))
+	defer syscall.SyscallN(item.vtbl.Release, pItem)
 
 	var hBitmap uintptr
 	dim := int32(size)
@@ -256,7 +269,7 @@ func extractViaShellCOM(filePath string, size int) ([]byte, error) {
 	sizeArg := uintptr(uint32(dim)) | (uintptr(uint32(dim)) << 32)
 
 	rGetImage, _, _ := syscall.SyscallN(
-		procGetImage,
+		item.vtbl.GetImage,
 		pItem,
 		sizeArg,
 		uintptr(SIIGBF_THUMBNAILONLY|SIIGBF_BIGGERSIZEOK),
@@ -264,16 +277,16 @@ func extractViaShellCOM(filePath string, size int) ([]byte, error) {
 	)
 
 	if int32(rGetImage) < 0 || hBitmap == 0 {
-		return nil, errors.New("IShellItemImageFactory::GetImage failed")
+		return nil, 0, errors.New("IShellItemImageFactory::GetImage failed")
 	}
 	defer procDeleteObject.Call(hBitmap)
 
-	// Convert HBITMAP to JPEG
+	// Convert HBITMAP to JPEG and hash
 	return hBitmapToJPEG(hBitmap)
 }
 
-// hBitmapToJPEG converts an HBITMAP to JPEG bytes.
-func hBitmapToJPEG(hBitmap uintptr) ([]byte, error) {
+// hBitmapToJPEG converts an HBITMAP to JPEG bytes and computes its 64-bit dHash.
+func hBitmapToJPEG(hBitmap uintptr) ([]byte, uint64, error) {
 	var bm BITMAP
 	r0, _, _ := procGetObjectW.Call(
 		hBitmap,
@@ -281,18 +294,18 @@ func hBitmapToJPEG(hBitmap uintptr) ([]byte, error) {
 		uintptr(unsafe.Pointer(&bm)),
 	)
 	if r0 == 0 || bm.Width <= 0 || bm.Height <= 0 {
-		return nil, errors.New("GetObjectW failed on HBITMAP")
+		return nil, 0, errors.New("GetObjectW failed on HBITMAP")
 	}
 
 	hDC, _, _ := procGetDC.Call(0)
 	if hDC == 0 {
-		return nil, errors.New("GetDC failed")
+		return nil, 0, errors.New("GetDC failed")
 	}
 	defer procReleaseDC.Call(0, hDC)
 
 	memDC, _, _ := procCreateCompatibleDC.Call(hDC)
 	if memDC == 0 {
-		return nil, errors.New("CreateCompatibleDC failed")
+		return nil, 0, errors.New("CreateCompatibleDC failed")
 	}
 	defer procDeleteDC.Call(memDC)
 
@@ -318,7 +331,7 @@ func hBitmapToJPEG(hBitmap uintptr) ([]byte, error) {
 		DIB_RGB_COLORS,
 	)
 	if rDIB == 0 {
-		return nil, errors.New("GetDIBits failed")
+		return nil, 0, errors.New("GetDIBits failed")
 	}
 
 	// Convert BGRA to RGBA image
@@ -338,9 +351,11 @@ func hBitmapToJPEG(hBitmap uintptr) ([]byte, error) {
 		}
 	}
 
+	hash := DHash64(img)
+
 	var out bytes.Buffer
 	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: 80}); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return out.Bytes(), nil
+	return out.Bytes(), hash, nil
 }

@@ -295,7 +295,7 @@ func OpenFolderAndSelectItem(fullPath string) error {
 }
 
 // SHCreateItemFromParsingName creates a shell item object from a standard path.
-func SHCreateItemFromParsingName(path string, riid *windows.GUID, ppv *uintptr) error {
+func SHCreateItemFromParsingName(path string, riid *windows.GUID, ppv unsafe.Pointer) error {
 	// Shell APIs require standard clean paths, NOT \\?\ extended paths
 	cleanPath := FromExtendedPath(filepath.Clean(path))
 	pathPtr, err := syscall.UTF16PtrFromString(cleanPath)
@@ -307,9 +307,9 @@ func SHCreateItemFromParsingName(path string, riid *windows.GUID, ppv *uintptr) 
 		uintptr(unsafe.Pointer(pathPtr)),
 		0,
 		uintptr(unsafe.Pointer(riid)),
-		uintptr(unsafe.Pointer(ppv)),
+		uintptr(ppv),
 	)
-	if int32(r0) < 0 || *ppv == 0 {
+	if int32(r0) < 0 {
 		return syscall.Errno(r0)
 	}
 	return nil

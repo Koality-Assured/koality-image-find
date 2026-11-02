@@ -330,6 +330,297 @@
       justify-content: space-between;
     }
 
+    /* Cluster Card Styling (Duplicates Mode) */
+    .cluster-card {
+      box-shadow: 0 4px 0 -1px var(--bg-surface-elevated), 0 4px 0 0 var(--border-subtle), 0 8px 0 -2px var(--bg-surface), 0 8px 0 -1px var(--border-subtle);
+    }
+
+    .cluster-card:hover {
+      box-shadow: 0 6px 0 -1px var(--bg-surface-elevated), 0 6px 0 0 var(--accent), 0 12px 0 -2px var(--bg-surface), 0 12px 0 -1px var(--accent);
+    }
+
+    .cluster-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(245, 158, 11, 0.95);
+      color: #0f1117;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      backdrop-filter: blur(4px);
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .savings-badge {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      background: rgba(16, 185, 129, 0.9);
+      color: #fff;
+      font-weight: 700;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      backdrop-filter: blur(4px);
+    }
+
+    /* Comparison Tabs & Controls */
+    .comparison-tabs {
+      display: inline-flex;
+      background: var(--bg-surface-elevated);
+      padding: 2px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* Split Curtain Slider */
+    .curtain-container {
+      position: relative;
+      max-width: 90%;
+      max-height: 85%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+
+    .curtain-box {
+      position: relative;
+      display: inline-block;
+      overflow: hidden;
+      border-radius: 6px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+    }
+
+    .curtain-bg-img {
+      display: block;
+      max-width: 100%;
+      max-height: 75vh;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .curtain-fg-wrap {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 50%;
+      overflow: hidden;
+      pointer-events: none;
+      border-right: 2px solid var(--accent);
+    }
+
+    .curtain-fg-img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      max-width: none;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .curtain-divider {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 4px;
+      transform: translateX(-50%);
+      background: var(--accent);
+      cursor: ew-resize;
+      z-index: 10;
+    }
+
+    .curtain-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 28px;
+      height: 28px;
+      background: #fff;
+      color: #0f1117;
+      border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: bold;
+      pointer-events: none;
+    }
+
+    /* Side-by-Side Dual View */
+    .side-by-side-container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      gap: 16px;
+      padding: 10px 20px;
+    }
+
+    .split-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #090a0d;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      position: relative;
+      overflow: hidden;
+      padding: 10px;
+    }
+
+    .split-pane.pane-primary {
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .split-pane.pane-dup {
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    .split-pane-img {
+      max-width: 95%;
+      max-height: 80%;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .pane-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      z-index: 2;
+    }
+
+    .pane-badge.primary { background: #10b981; color: #fff; }
+    .pane-badge.duplicate { background: #f59e0b; color: #000; }
+
+    .pane-meta {
+      position: absolute;
+      bottom: 12px;
+      background: rgba(24, 27, 36, 0.9);
+      border: 1px solid var(--border-subtle);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 10px;
+    }
+
+    /* Blink Indicator */
+    .blink-indicator {
+      position: absolute;
+      top: 20px;
+      background: rgba(33, 38, 52, 0.95);
+      border: 1px solid var(--accent);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      z-index: 10;
+    }
+
+    /* Variant List in Lightbox Sidebar */
+    .variant-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+      margin-top: 4px;
+    }
+
+    .variant-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.15s ease;
+    }
+
+    .variant-item:hover {
+      border-color: var(--accent);
+      background: var(--bg-hover);
+    }
+
+    .variant-item.active {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.15);
+    }
+
+    .variant-thumb {
+      width: 36px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #090a0d;
+    }
+
+    .variant-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .variant-name {
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-main);
+    }
+
+    .variant-size {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
     /* Lightbox Modal */
     .lightbox {
       position: fixed;
@@ -537,6 +828,12 @@
       <span>koality-image-find</span>
     </div>
 
+    <!-- Mode Selector -->
+    <div class="filter-group">
+      <button class="filter-btn active" id="btnModeBrowse">Browse Grid</button>
+      <button class="filter-btn" id="btnModeDuplicates">🥞 Duplicates & Similar</button>
+    </div>
+
     <!-- Search Input -->
     <div class="search-container">
       <svg class="search-icon" viewBox="0 0 20 20">
@@ -546,10 +843,23 @@
     </div>
 
     <!-- Media Filter -->
-    <div class="filter-group">
+    <div class="filter-group" id="mediaFilterGroup">
       <button class="filter-btn active" data-type="">All</button>
-      <button class="filter-btn" data-type="image">Images</button>
+      <button class="filter-btn" data-type="personal" title="Filter to common personal/camera media (jpg, png, gif, webm, mp4, mov, heic)">📸 Personal</button>
+      <button class="filter-btn" data-type="image">Photos</button>
       <button class="filter-btn" data-type="video">Videos</button>
+    </div>
+
+    <!-- Dedup Controls (Duplicates Mode) -->
+    <div class="filter-group" id="dedupControls" style="display:none;">
+      <select id="thresholdSelect" class="control-select" title="Similarity Threshold">
+        <option value="3">Exact (d &le; 3)</option>
+        <option value="6" selected>Near (d &le; 6)</option>
+        <option value="10">Similar (d &le; 10)</option>
+      </select>
+      <button class="filter-btn" id="btnScanDuplicates" title="Compute perceptual hashes for current items">
+        ⚡ Scan Hashes
+      </button>
     </div>
 
     <!-- Sort Options -->
@@ -589,6 +899,15 @@
   <div class="lightbox" id="lightbox">
     <div class="lightbox-header">
       <div class="lightbox-title" id="lightboxTitle">photo.jpg</div>
+      
+      <!-- Comparison Mode Tabs (for Cluster Inspector) -->
+      <div class="comparison-tabs" id="comparisonTabs" style="display:none;">
+        <button class="tab-btn active" id="tabSplit">Curtain Split</button>
+        <button class="tab-btn" id="tabSideBySide">Side-by-Side</button>
+        <button class="tab-btn" id="tabBlink">Blink Diff</button>
+        <button class="tab-btn" id="tabSingle">Single</button>
+      </div>
+
       <div class="lightbox-actions">
         <button class="action-btn" id="btnReveal">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
@@ -606,8 +925,43 @@
     <div class="lightbox-body">
       <button class="nav-arrow prev" id="btnPrev">&larr;</button>
       <div class="lightbox-stage" id="lightboxStage">
+        <!-- Standard Single View -->
         <img id="lightboxImg" class="lightbox-img" style="display:none;" />
         <video id="lightboxVideo" class="lightbox-video" controls autoplay loop style="display:none;"></video>
+        
+        <!-- Curtain Split Container -->
+        <div id="curtainContainer" class="curtain-container" style="display:none;">
+          <div class="curtain-box" id="curtainBox">
+            <img id="curtainBgImg" class="curtain-bg-img" />
+            <div id="curtainFgWrap" class="curtain-fg-wrap">
+              <img id="curtainFgImg" class="curtain-fg-img" />
+            </div>
+            <div id="curtainDivider" class="curtain-divider">
+              <div class="curtain-handle">&harr;</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Side-by-Side Dual View Container -->
+        <div id="sideBySideContainer" class="side-by-side-container" style="display:none;">
+          <div class="split-pane pane-primary">
+            <div class="pane-badge primary">Primary (Keeper)</div>
+            <img id="sideImgPrimary" class="split-pane-img" />
+            <div class="pane-meta" id="sideMetaPrimary">-</div>
+          </div>
+          <div class="split-pane pane-dup">
+            <div class="pane-badge duplicate">Duplicate Variant</div>
+            <img id="sideImgDup" class="split-pane-img" />
+            <div class="pane-meta" id="sideMetaDup">-</div>
+          </div>
+        </div>
+
+        <!-- Blink Diff Floating Indicator -->
+        <div id="blinkIndicator" class="blink-indicator" style="display:none;">
+          <span id="blinkLabel">Comparing: Primary (Keeper)</span>
+          <button class="action-btn" id="btnBlinkToggle" style="padding: 2px 8px; font-size: 11px;">Swap (Space)</button>
+        </div>
+
         <div id="videoFallbackBanner" class="video-codec-fallback-banner" style="display:none;">
           <span>Notice: This video format may require system media codecs.</span>
           <button class="action-btn" id="btnBannerOpen">Open in System Player</button>
@@ -617,6 +971,12 @@
 
       <!-- Sidebar -->
       <div class="lightbox-sidebar">
+        <!-- Cluster Duplicates Section (Duplicates Mode) -->
+        <div class="meta-group" id="clusterVariantsGroup" style="display:none;">
+          <div class="meta-label">Duplicates In Cluster (<span id="variantCount">0</span>)</div>
+          <div id="variantList" class="variant-list"></div>
+        </div>
+
         <div class="meta-group">
           <div class="meta-label">File Name</div>
           <div class="meta-value" id="metaName">-</div>
@@ -650,10 +1010,12 @@
     const sessionToken = urlParams.get('token') || '';
 
     // State
-    let currentFilterType = '';
+    let currentMode = 'browse'; // 'browse' | 'duplicates'
+    let currentFilterType = ''; // '' | 'personal' | 'image' | 'video'
     let currentSearch = '';
     let currentSortField = 'date';
     let currentSortOrder = 'desc';
+    let currentThreshold = 6;
     let cardSize = 200;
     const cardGap = 14;
     const cardLabelHeight = 44;
@@ -662,9 +1024,15 @@
     let activeLightboxItem = null;
     let activeLightboxIndex = -1;
 
+    // Cluster inspection state
+    let activeCluster = null;
+    let activeVariantIndex = 0;
+    let activeComparisonMode = 'split'; // 'split' | 'sidebyside' | 'blink' | 'single'
+    let isBlinkToggled = false;
+
     // Cache of fetched items for fast viewport rendering
     const itemCache = new Map(); // id -> item
-    let visibleIndicesMap = new Map(); // indexInQuery -> item
+    let visibleIndicesMap = new Map(); // indexInQuery -> item or cluster
 
     // DOM Elements
     const viewport = document.getElementById('viewport');
@@ -677,6 +1045,13 @@
     const pulseDot = document.getElementById('pulseDot');
     const statsSummary = document.getElementById('statsSummary');
 
+    // Header Mode & Dedup Controls
+    const btnModeBrowse = document.getElementById('btnModeBrowse');
+    const btnModeDuplicates = document.getElementById('btnModeDuplicates');
+    const dedupControls = document.getElementById('dedupControls');
+    const thresholdSelect = document.getElementById('thresholdSelect');
+    const btnScanDuplicates = document.getElementById('btnScanDuplicates');
+
     // Lightbox Elements
     const lightbox = document.getElementById('lightbox');
     const lightboxTitle = document.getElementById('lightboxTitle');
@@ -688,6 +1063,34 @@
     const metaSize = document.getElementById('metaSize');
     const metaDate = document.getElementById('metaDate');
     const metaType = document.getElementById('metaType');
+
+    // Comparison Controls
+    const comparisonTabs = document.getElementById('comparisonTabs');
+    const tabSplit = document.getElementById('tabSplit');
+    const tabSideBySide = document.getElementById('tabSideBySide');
+    const tabBlink = document.getElementById('tabBlink');
+    const tabSingle = document.getElementById('tabSingle');
+
+    const curtainContainer = document.getElementById('curtainContainer');
+    const curtainBox = document.getElementById('curtainBox');
+    const curtainBgImg = document.getElementById('curtainBgImg');
+    const curtainFgWrap = document.getElementById('curtainFgWrap');
+    const curtainFgImg = document.getElementById('curtainFgImg');
+    const curtainDivider = document.getElementById('curtainDivider');
+
+    const sideBySideContainer = document.getElementById('sideBySideContainer');
+    const sideImgPrimary = document.getElementById('sideImgPrimary');
+    const sideMetaPrimary = document.getElementById('sideMetaPrimary');
+    const sideImgDup = document.getElementById('sideImgDup');
+    const sideMetaDup = document.getElementById('sideMetaDup');
+
+    const blinkIndicator = document.getElementById('blinkIndicator');
+    const blinkLabel = document.getElementById('blinkLabel');
+    const btnBlinkToggle = document.getElementById('btnBlinkToggle');
+
+    const clusterVariantsGroup = document.getElementById('clusterVariantsGroup');
+    const variantCount = document.getElementById('variantCount');
+    const variantList = document.getElementById('variantList');
 
     // Utility: Format file size
     function formatBytes(bytes) {
@@ -726,6 +1129,34 @@
 
     let isFetching = false;
     let pendingFetchTimeout = null;
+    let currentFetchSeq = 0;
+    let dedupPollTimer = null;
+
+    function pollDedupProgress() {
+      if (dedupPollTimer) return;
+      dedupPollTimer = setInterval(async () => {
+        try {
+          const resp = await apiFetch('/api/dedup/status');
+          if (resp.ok) {
+            const status = await resp.json();
+            if (status.running) {
+              statsSummary.textContent = `⚡ Computing perceptual hashes: ${status.processed} / ${status.total}...`;
+            } else {
+              clearInterval(dedupPollTimer);
+              dedupPollTimer = null;
+              if (currentMode === 'duplicates') {
+                visibleIndicesMap.clear();
+                viewport.scrollTop = 0;
+                fetchRange(0, 50, false);
+              }
+            }
+          }
+        } catch (err) {
+          clearInterval(dedupPollTimer);
+          dedupPollTimer = null;
+        }
+      }, 1000);
+    }
 
     async function updateVirtualGrid() {
       const { cols, rowHeight, totalHeight } = getGridGeometry();
@@ -767,41 +1198,102 @@
       renderCards(startIndex, endIndex);
     }
 
-    async function fetchRange(offset, limit) {
+    async function fetchRange(offset, limit, forceCompute = false) {
       if (isFetching) return;
       isFetching = true;
 
-      const queryParams = new URLSearchParams({
-        q: currentSearch,
-        type: currentFilterType,
-        sort: currentSortField,
-        order: currentSortOrder,
-        offset: offset.toString(),
-        limit: Math.max(limit, 100).toString(),
-        token: sessionToken
-      });
+      const fetchSeq = ++currentFetchSeq;
+      const reqMode = currentMode;
 
-      try {
-        const resp = await apiFetch(`/api/items?${queryParams}`);
-        if (resp.ok) {
-          const data = await resp.json();
-          totalItemCount = data.totalCount;
-          statsSummary.textContent = `${totalItemCount.toLocaleString()} items`;
+      const isPersonal = currentFilterType === 'personal';
+      const mediaType = isPersonal ? '' : currentFilterType;
 
-          data.items.forEach((item, idx) => {
-            const absoluteIdx = offset + idx;
-            visibleIndicesMap.set(absoluteIdx, item);
-            itemCache.set(item.id, item);
-          });
+      if (currentMode === 'browse') {
+        const queryParams = new URLSearchParams({
+          q: currentSearch,
+          type: mediaType,
+          preset: isPersonal ? 'personal' : '',
+          sort: currentSortField,
+          order: currentSortOrder,
+          offset: offset.toString(),
+          limit: Math.max(limit, 100).toString(),
+          token: sessionToken
+        });
 
-          const { totalHeight } = getGridGeometry();
-          spacer.style.height = totalHeight + 'px';
-          renderCards(offset, offset + data.items.length);
+        try {
+          const resp = await apiFetch(`/api/items?${queryParams}`);
+          if (resp.ok) {
+            // Discard stale in-flight response if mode switched
+            if (fetchSeq !== currentFetchSeq || reqMode !== currentMode) return;
+
+            const data = await resp.json();
+            totalItemCount = data.totalCount;
+            statsSummary.textContent = `${totalItemCount.toLocaleString()} items`;
+
+            data.items.forEach((item, idx) => {
+              const absoluteIdx = offset + idx;
+              visibleIndicesMap.set(absoluteIdx, item);
+              itemCache.set(item.id, item);
+            });
+
+            const { totalHeight } = getGridGeometry();
+            spacer.style.height = totalHeight + 'px';
+            renderCards(offset, offset + data.items.length);
+          }
+        } catch (err) {
+          console.error('Fetch items error:', err);
+        } finally {
+          isFetching = false;
         }
-      } catch (err) {
-        console.error('Fetch items error:', err);
-      } finally {
-        isFetching = false;
+      } else {
+        // Duplicates Mode
+        const queryParams = new URLSearchParams({
+          q: currentSearch,
+          type: mediaType,
+          preset: isPersonal ? 'personal' : '',
+          threshold: currentThreshold.toString(),
+          offset: offset.toString(),
+          limit: Math.max(limit, 50).toString(),
+          compute: forceCompute ? '1' : '0',
+          token: sessionToken
+        });
+
+        try {
+          const resp = await apiFetch(`/api/duplicates?${queryParams}`);
+          if (resp.ok) {
+            // Discard stale in-flight response if mode switched
+            if (fetchSeq !== currentFetchSeq || reqMode !== currentMode) return;
+
+            const data = await resp.json();
+            totalItemCount = data.totalClusters || 0;
+            const duplicateCount = data.totalDuplicates || 0;
+            const reclaimable = data.totalReclaimableSize || 0;
+
+            if (data.computing) {
+              statsSummary.textContent = `Computing perceptual hashes... (${data.hashedItems}/${data.totalItems} done)`;
+              pollDedupProgress();
+            } else {
+              statsSummary.textContent = `${totalItemCount.toLocaleString()} duplicate clusters (${duplicateCount} copies • Reclaim ${formatBytes(reclaimable)})`;
+            }
+
+            if (data.clusters) {
+              data.clusters.forEach((cluster, idx) => {
+                const absoluteIdx = offset + idx;
+                visibleIndicesMap.set(absoluteIdx, cluster);
+                if (cluster.primary) itemCache.set(cluster.primary.id, cluster.primary);
+                if (cluster.duplicates) cluster.duplicates.forEach(d => itemCache.set(d.id, d));
+              });
+            }
+
+            const { totalHeight } = getGridGeometry();
+            spacer.style.height = totalHeight + 'px';
+            renderCards(offset, offset + (data.clusters ? data.clusters.length : 0));
+          }
+        } catch (err) {
+          console.error('Fetch duplicates error:', err);
+        } finally {
+          isFetching = false;
+        }
       }
     }
 
@@ -809,8 +1301,8 @@
       const fragment = document.createDocumentFragment();
 
       for (let i = startIndex; i < endIndex; i++) {
-        const item = visibleIndicesMap.get(i);
-        if (!item) {
+        const entry = visibleIndicesMap.get(i);
+        if (!entry) {
           // Skeleton placeholder card
           const placeholder = document.createElement('div');
           placeholder.className = 'media-card';
@@ -819,59 +1311,123 @@
           continue;
         }
 
-        const card = document.createElement('div');
-        card.className = 'media-card';
-        card.style.height = (cardSize + cardLabelHeight) + 'px';
-        card.onclick = () => openLightbox(item, i);
+        if (currentMode === 'browse') {
+          const item = entry;
+          // Guard against stale cluster object in browse mode
+          if (!item || !item.name || item.primary) continue;
 
-        const thumbWrap = document.createElement('div');
-        thumbWrap.className = 'thumb-wrap';
-        thumbWrap.style.height = cardSize + 'px';
+          const card = document.createElement('div');
+          card.className = 'media-card';
+          card.style.height = (cardSize + cardLabelHeight) + 'px';
+          card.onclick = () => openLightbox(item, i);
 
-        const img = document.createElement('img');
-        img.className = 'thumb-img';
-        img.loading = 'lazy';
-        img.src = `/api/thumbnail?id=${item.id}&size=${cardSize}&token=${sessionToken}`;
-        thumbWrap.appendChild(img);
+          const thumbWrap = document.createElement('div');
+          thumbWrap.className = 'thumb-wrap';
+          thumbWrap.style.height = cardSize + 'px';
 
-        // Badge
-        const badge = document.createElement('div');
-        badge.className = 'type-badge ' + (item.mediaType === 2 ? 'video' : 'image');
-        badge.textContent = item.ext.replace('.', '');
-        thumbWrap.appendChild(badge);
+          const img = document.createElement('img');
+          img.className = 'thumb-img';
+          img.loading = 'lazy';
+          img.src = `/api/thumbnail?id=${item.id}&size=${cardSize}&token=${sessionToken}`;
+          thumbWrap.appendChild(img);
 
-        if (item.mediaType === 2) {
-          const playOverlay = document.createElement('div');
-          playOverlay.className = 'video-play-overlay';
-          playOverlay.innerHTML = '<svg viewBox="0 0 20 20"><path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.34-5.89a1.5 1.5 0 000-2.54L6.3 2.84z"/></svg>';
-          thumbWrap.appendChild(playOverlay);
+          // Badge
+          const badge = document.createElement('div');
+          badge.className = 'type-badge ' + (item.mediaType === 2 ? 'video' : 'image');
+          badge.textContent = item.ext.replace('.', '');
+          thumbWrap.appendChild(badge);
+
+          if (item.mediaType === 2) {
+            const playOverlay = document.createElement('div');
+            playOverlay.className = 'video-play-overlay';
+            playOverlay.innerHTML = '<svg viewBox="0 0 20 20"><path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.34-5.89a1.5 1.5 0 000-2.54L6.3 2.84z"/></svg>';
+            thumbWrap.appendChild(playOverlay);
+          }
+
+          card.appendChild(thumbWrap);
+
+          // Meta info (safe DOM assignment, zero XSS risk)
+          const meta = document.createElement('div');
+          meta.className = 'card-meta';
+
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'card-title';
+          titleDiv.title = item.name;
+          titleDiv.textContent = item.name;
+
+          const subDiv = document.createElement('div');
+          subDiv.className = 'card-sub';
+          const sizeSpan = document.createElement('span');
+          sizeSpan.textContent = formatBytes(item.size);
+          const dateSpan = document.createElement('span');
+          dateSpan.textContent = formatDate(item.modTime).split(' ')[0];
+          subDiv.appendChild(sizeSpan);
+          subDiv.appendChild(dateSpan);
+
+          meta.appendChild(titleDiv);
+          meta.appendChild(subDiv);
+          card.appendChild(meta);
+
+          fragment.appendChild(card);
+        } else {
+          // Duplicates Cluster Card
+          const cluster = entry;
+          // Guard against stale item object in cluster mode
+          if (!cluster || !cluster.primary) continue;
+          const primary = cluster.primary;
+
+          const card = document.createElement('div');
+          card.className = 'media-card cluster-card';
+          card.style.height = (cardSize + cardLabelHeight) + 'px';
+          card.onclick = () => openClusterInspector(cluster, i);
+
+          const thumbWrap = document.createElement('div');
+          thumbWrap.className = 'thumb-wrap';
+          thumbWrap.style.height = cardSize + 'px';
+
+          const img = document.createElement('img');
+          img.className = 'thumb-img';
+          img.loading = 'lazy';
+          img.src = `/api/thumbnail?id=${primary.id}&size=${cardSize}&token=${sessionToken}`;
+          thumbWrap.appendChild(img);
+
+          // Stack badge: copy count
+          const clusterBadge = document.createElement('div');
+          clusterBadge.className = 'cluster-badge';
+          clusterBadge.textContent = `🥞 ${cluster.count} copies`;
+          thumbWrap.appendChild(clusterBadge);
+
+          // Savings badge: reclaimed bytes
+          const savingsBadge = document.createElement('div');
+          savingsBadge.className = 'savings-badge';
+          savingsBadge.textContent = `Save ${formatBytes(cluster.reclaimableSize)}`;
+          thumbWrap.appendChild(savingsBadge);
+
+          card.appendChild(thumbWrap);
+
+          const meta = document.createElement('div');
+          meta.className = 'card-meta';
+
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'card-title';
+          titleDiv.title = primary.name;
+          titleDiv.textContent = primary.name;
+
+          const subDiv = document.createElement('div');
+          subDiv.className = 'card-sub';
+          const sizeSpan = document.createElement('span');
+          sizeSpan.textContent = `Primary: ${formatBytes(primary.size)}`;
+          const diffSpan = document.createElement('span');
+          diffSpan.textContent = `d ≤ ${cluster.maxDistance}`;
+          subDiv.appendChild(sizeSpan);
+          subDiv.appendChild(diffSpan);
+
+          meta.appendChild(titleDiv);
+          meta.appendChild(subDiv);
+          card.appendChild(meta);
+
+          fragment.appendChild(card);
         }
-
-        card.appendChild(thumbWrap);
-
-        // Meta info (safe DOM assignment, zero XSS risk)
-        const meta = document.createElement('div');
-        meta.className = 'card-meta';
-
-        const titleDiv = document.createElement('div');
-        titleDiv.className = 'card-title';
-        titleDiv.title = item.name;
-        titleDiv.textContent = item.name;
-
-        const subDiv = document.createElement('div');
-        subDiv.className = 'card-sub';
-        const sizeSpan = document.createElement('span');
-        sizeSpan.textContent = formatBytes(item.size);
-        const dateSpan = document.createElement('span');
-        dateSpan.textContent = formatDate(item.modTime).split(' ')[0];
-        subDiv.appendChild(sizeSpan);
-        subDiv.appendChild(dateSpan);
-
-        meta.appendChild(titleDiv);
-        meta.appendChild(subDiv);
-        card.appendChild(meta);
-
-        fragment.appendChild(card);
       }
 
       cardsContainer.innerHTML = '';
@@ -892,7 +1448,7 @@
             scanStatusText.textContent = `Scanning drive... (${stats.imagesFound.toLocaleString()} images, ${stats.videosFound.toLocaleString()} videos)`;
           }
 
-          if (totalItemCount === 0 && stats.totalIndexed > 0) {
+          if (totalItemCount === 0 && stats.totalIndexed > 0 && currentMode === 'browse') {
             totalItemCount = stats.totalIndexed;
             updateVirtualGrid();
           }
@@ -902,10 +1458,17 @@
       }
     }
 
-    // Lightbox Controls
+    // Lightbox Standard Controls
     function openLightbox(item, index) {
+      activeCluster = null;
       activeLightboxItem = item;
       activeLightboxIndex = index;
+
+      comparisonTabs.style.display = 'none';
+      clusterVariantsGroup.style.display = 'none';
+      curtainContainer.style.display = 'none';
+      sideBySideContainer.style.display = 'none';
+      blinkIndicator.style.display = 'none';
 
       lightboxTitle.textContent = item.name;
       metaName.textContent = item.name;
@@ -921,7 +1484,6 @@
         lightboxVideo.style.display = 'block';
         lightboxVideo.src = mediaUrl;
 
-        // Show fallback banner for formats Chromium may reject
         const ext = item.ext.toLowerCase();
         if (ext === '.mkv' || ext === '.avi' || ext === '.wmv' || ext === '.flv') {
           videoFallbackBanner.style.display = 'flex';
@@ -939,12 +1501,209 @@
       lightbox.classList.add('active');
     }
 
+    // Cluster Inspector & Interactive Comparison
+    function openClusterInspector(cluster, index) {
+      activeCluster = cluster;
+      activeLightboxIndex = index;
+      activeVariantIndex = 0;
+
+      lightboxTitle.textContent = `Cluster #${cluster.id} • ${cluster.count} Copies (Save ${formatBytes(cluster.reclaimableSize)})`;
+      comparisonTabs.style.display = 'inline-flex';
+      clusterVariantsGroup.style.display = 'flex';
+      variantCount.textContent = cluster.duplicates.length;
+
+      // Populate variants list in sidebar
+      variantList.innerHTML = '';
+      cluster.duplicates.forEach((dup, dIdx) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'variant-item ' + (dIdx === activeVariantIndex ? 'active' : '');
+        itemEl.onclick = () => selectClusterVariant(dIdx);
+
+        const img = document.createElement('img');
+        img.className = 'variant-thumb';
+        img.src = `/api/thumbnail?id=${dup.id}&size=80&token=${sessionToken}`;
+        itemEl.appendChild(img);
+
+        const info = document.createElement('div');
+        info.className = 'variant-info';
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'variant-name';
+        nameDiv.textContent = dup.name;
+        const sizeDiv = document.createElement('div');
+        sizeDiv.className = 'variant-size';
+        sizeDiv.textContent = `${formatBytes(dup.size)} • ${dup.ext}`;
+        info.appendChild(nameDiv);
+        info.appendChild(sizeDiv);
+        itemEl.appendChild(info);
+
+        variantList.appendChild(itemEl);
+      });
+
+      selectClusterVariant(0);
+      setComparisonMode('split');
+      lightbox.classList.add('active');
+    }
+
+    function selectClusterVariant(dIdx) {
+      if (!activeCluster || !activeCluster.duplicates[dIdx]) return;
+      activeVariantIndex = dIdx;
+      activeLightboxItem = activeCluster.duplicates[dIdx];
+
+      // Highlight in list
+      const items = variantList.querySelectorAll('.variant-item');
+      items.forEach((el, idx) => {
+        if (idx === dIdx) el.classList.add('active');
+        else el.classList.remove('active');
+      });
+
+      const primary = activeCluster.primary;
+      const dup = activeCluster.duplicates[dIdx];
+
+      metaName.textContent = dup.name;
+      metaPath.textContent = dup.path;
+      metaSize.textContent = `${formatBytes(dup.size)} (Primary: ${formatBytes(primary.size)})`;
+      metaDate.textContent = formatDate(dup.modTime);
+      metaType.textContent = (dup.mediaType === 2 ? 'Video' : 'Image') + ' (' + dup.ext + ')';
+
+      updateComparisonStage();
+    }
+
+    function setComparisonMode(mode) {
+      activeComparisonMode = mode;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+      if (mode === 'split') tabSplit.classList.add('active');
+      else if (mode === 'sidebyside') tabSideBySide.classList.add('active');
+      else if (mode === 'blink') tabBlink.classList.add('active');
+      else if (mode === 'single') tabSingle.classList.add('active');
+
+      updateComparisonStage();
+    }
+
+    function updateComparisonStage() {
+      if (!activeCluster) return;
+      const primary = activeCluster.primary;
+      const dup = activeCluster.duplicates[activeVariantIndex];
+
+      const isVideo = primary.mediaType === 2 || dup.mediaType === 2;
+      const primaryUrl = isVideo ? `/api/thumbnail?id=${primary.id}&size=800&token=${sessionToken}` : `/api/media?id=${primary.id}&token=${sessionToken}`;
+      const dupUrl = isVideo ? `/api/thumbnail?id=${dup.id}&size=800&token=${sessionToken}` : `/api/media?id=${dup.id}&token=${sessionToken}`;
+
+      lightboxVideo.style.display = 'none';
+      videoFallbackBanner.style.display = 'none';
+
+      if (activeComparisonMode === 'split') {
+        lightboxImg.style.display = 'none';
+        sideBySideContainer.style.display = 'none';
+        blinkIndicator.style.display = 'none';
+        curtainContainer.style.display = 'flex';
+
+        curtainBgImg.src = primaryUrl;
+        curtainFgImg.src = dupUrl;
+        resetCurtainPosition();
+
+      } else if (activeComparisonMode === 'sidebyside') {
+        lightboxImg.style.display = 'none';
+        curtainContainer.style.display = 'none';
+        blinkIndicator.style.display = 'none';
+        sideBySideContainer.style.display = 'flex';
+
+        sideImgPrimary.src = primaryUrl;
+        sideMetaPrimary.textContent = `${formatBytes(primary.size)} • ${primary.ext} • ${formatDate(primary.modTime).split(' ')[0]}`;
+
+        sideImgDup.src = dupUrl;
+        sideMetaDup.textContent = `${formatBytes(dup.size)} • ${dup.ext} • ${formatDate(dup.modTime).split(' ')[0]}`;
+
+      } else if (activeComparisonMode === 'blink') {
+        curtainContainer.style.display = 'none';
+        sideBySideContainer.style.display = 'none';
+        lightboxImg.style.display = 'block';
+        blinkIndicator.style.display = 'flex';
+
+        isBlinkToggled = false;
+        lightboxImg.src = primaryUrl;
+        blinkLabel.textContent = `Primary: ${primary.name} (${formatBytes(primary.size)})`;
+
+      } else if (activeComparisonMode === 'single') {
+        curtainContainer.style.display = 'none';
+        sideBySideContainer.style.display = 'none';
+        blinkIndicator.style.display = 'none';
+        lightboxImg.style.display = 'block';
+        lightboxImg.src = dupUrl;
+      }
+    }
+
+    function toggleBlink() {
+      if (!activeCluster) return;
+      isBlinkToggled = !isBlinkToggled;
+      const primary = activeCluster.primary;
+      const dup = activeCluster.duplicates[activeVariantIndex];
+
+      const isVideo = primary.mediaType === 2 || dup.mediaType === 2;
+      const primaryUrl = isVideo ? `/api/thumbnail?id=${primary.id}&size=800&token=${sessionToken}` : `/api/media?id=${primary.id}&token=${sessionToken}`;
+      const dupUrl = isVideo ? `/api/thumbnail?id=${dup.id}&size=800&token=${sessionToken}` : `/api/media?id=${dup.id}&token=${sessionToken}`;
+
+      if (isBlinkToggled) {
+        lightboxImg.src = dupUrl;
+        blinkLabel.textContent = `Variant: ${dup.name} (${formatBytes(dup.size)})`;
+      } else {
+        lightboxImg.src = primaryUrl;
+        blinkLabel.textContent = `Primary: ${primary.name} (${formatBytes(primary.size)})`;
+      }
+    }
+
+    // Curtain Split Drag & Scaling Handling
+    let isDraggingCurtain = false;
+
+    function resetCurtainPosition() {
+      curtainFgWrap.style.width = '50%';
+      curtainDivider.style.left = '50%';
+      syncCurtainDimensions();
+    }
+
+    function syncCurtainDimensions() {
+      if (curtainBgImg.clientWidth > 0) {
+        curtainFgImg.style.width = curtainBgImg.clientWidth + 'px';
+        curtainFgImg.style.height = curtainBgImg.clientHeight + 'px';
+      }
+    }
+
+    curtainBgImg.onload = syncCurtainDimensions;
+    window.addEventListener('resize', syncCurtainDimensions);
+
+    function onCurtainPointerMove(e) {
+      if (!isDraggingCurtain) return;
+      const rect = curtainBox.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      let pct = (x / rect.width) * 100;
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+
+      curtainFgWrap.style.width = pct + '%';
+      curtainDivider.style.left = pct + '%';
+    }
+
+    curtainDivider.addEventListener('pointerdown', (e) => {
+      isDraggingCurtain = true;
+      curtainDivider.setPointerCapture(e.pointerId);
+    });
+
+    window.addEventListener('pointermove', onCurtainPointerMove);
+    window.addEventListener('pointerup', () => {
+      isDraggingCurtain = false;
+    });
+
     function closeLightbox() {
       lightbox.classList.remove('active');
       lightboxVideo.pause();
       lightboxVideo.src = '';
       lightboxImg.src = '';
+      curtainBgImg.src = '';
+      curtainFgImg.src = '';
+      sideImgPrimary.src = '';
+      sideImgDup.src = '';
       activeLightboxItem = null;
+      activeCluster = null;
     }
 
     function navigateLightbox(direction) {
@@ -952,11 +1711,21 @@
       if (nextIdx >= 0 && nextIdx < totalItemCount) {
         const nextItem = visibleIndicesMap.get(nextIdx);
         if (nextItem) {
-          openLightbox(nextItem, nextIdx);
+          if (currentMode === 'duplicates') {
+            openClusterInspector(nextItem, nextIdx);
+          } else {
+            openLightbox(nextItem, nextIdx);
+          }
         } else {
           fetchRange(nextIdx, 10).then(() => {
             const fetched = visibleIndicesMap.get(nextIdx);
-            if (fetched) openLightbox(fetched, nextIdx);
+            if (fetched) {
+              if (currentMode === 'duplicates') {
+                openClusterInspector(fetched, nextIdx);
+              } else {
+                openLightbox(fetched, nextIdx);
+              }
+            }
           });
         }
       }
@@ -971,19 +1740,57 @@
       updateVirtualGrid();
     });
 
+    // Mode Switchers
+    btnModeBrowse.onclick = () => {
+      if (currentMode === 'browse') return;
+      currentMode = 'browse';
+      btnModeBrowse.classList.add('active');
+      btnModeDuplicates.classList.remove('active');
+      dedupControls.style.display = 'none';
+      sortSelect.style.display = 'inline-block';
+      visibleIndicesMap.clear();
+      viewport.scrollTop = 0;
+      fetchRange(0, 100);
+    };
+
+    btnModeDuplicates.onclick = () => {
+      if (currentMode === 'duplicates') return;
+      currentMode = 'duplicates';
+      btnModeDuplicates.classList.add('active');
+      btnModeBrowse.classList.remove('active');
+      dedupControls.style.display = 'flex';
+      sortSelect.style.display = 'none'; // Duplicates are sorted by reclaimable space descending
+      visibleIndicesMap.clear();
+      viewport.scrollTop = 0;
+      fetchRange(0, 50, true);
+    };
+
+    thresholdSelect.onchange = (e) => {
+      currentThreshold = parseInt(e.target.value, 10);
+      visibleIndicesMap.clear();
+      viewport.scrollTop = 0;
+      fetchRange(0, 50, false);
+    };
+
+    btnScanDuplicates.onclick = () => {
+      visibleIndicesMap.clear();
+      viewport.scrollTop = 0;
+      fetchRange(0, 50, true);
+    };
+
     // Filter Buttons
-    document.querySelectorAll('.filter-btn').forEach(btn => {
+    document.querySelectorAll('#mediaFilterGroup .filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#mediaFilterGroup .filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentFilterType = btn.dataset.type;
         visibleIndicesMap.clear();
         viewport.scrollTop = 0;
-        fetchRange(0, 100);
+        fetchRange(0, currentMode === 'browse' ? 100 : 50, currentMode === 'duplicates');
       });
     });
 
-    // Search Input (16ms debounce)
+    // Search Input (50ms debounce)
     let searchDebounce = null;
     searchInput.addEventListener('input', (e) => {
       clearTimeout(searchDebounce);
@@ -991,7 +1798,7 @@
         currentSearch = e.target.value.trim();
         visibleIndicesMap.clear();
         viewport.scrollTop = 0;
-        fetchRange(0, 100);
+        fetchRange(0, currentMode === 'browse' ? 100 : 50, currentMode === 'duplicates');
       }, 50);
     });
 
@@ -1010,6 +1817,13 @@
       cardSize = parseInt(e.target.value, 10);
       updateVirtualGrid();
     });
+
+    // Comparison Mode Tabs
+    tabSplit.onclick = () => setComparisonMode('split');
+    tabSideBySide.onclick = () => setComparisonMode('sidebyside');
+    tabBlink.onclick = () => setComparisonMode('blink');
+    tabSingle.onclick = () => setComparisonMode('single');
+    btnBlinkToggle.onclick = toggleBlink;
 
     // Lightbox Buttons
     document.getElementById('btnCloseLightbox').onclick = closeLightbox;
@@ -1059,6 +1873,10 @@
         if (e.key === 'Escape') closeLightbox();
         if (e.key === 'ArrowLeft') navigateLightbox(-1);
         if (e.key === 'ArrowRight') navigateLightbox(1);
+        if (e.key === ' ' && activeComparisonMode === 'blink') {
+          e.preventDefault();
+          toggleBlink();
+        }
       }
     });
 

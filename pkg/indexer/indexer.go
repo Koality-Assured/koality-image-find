@@ -27,7 +27,8 @@ type ItemRecord struct {
 }
 
 const (
-	FlagIsCloud uint8 = 1 << 0
+	FlagIsCloud    uint8 = 1 << 0
+	FlagIsPersonal uint8 = 1 << 1
 
 	SortByName uint8 = 1
 	SortByDate uint8 = 2
@@ -40,13 +41,14 @@ const (
 
 // Query defines search and filter criteria.
 type Query struct {
-	SearchText string
-	MediaType  uint8
-	Extension  string
-	MinSize    int64
-	MaxSize    int64
-	MinDate    int64
-	MaxDate    int64
+	SearchText   string
+	MediaType    uint8
+	Extension    string
+	PersonalOnly bool
+	MinSize      int64
+	MaxSize      int64
+	MinDate      int64
+	MaxDate      int64
 }
 
 // SortConfig defines order and sorting field.
@@ -57,14 +59,15 @@ type SortConfig struct {
 
 // ItemView is the expanded human/UI-ready representation of an item.
 type ItemView struct {
-	ID        uint32 `json:"id"`
-	Path      string `json:"path"`
-	Name      string `json:"name"`
-	Ext       string `json:"ext"`
-	MediaType uint8  `json:"mediaType"`
-	Size      int64  `json:"size"`
-	ModTime   int64  `json:"modTime"`
-	IsCloud   bool   `json:"isCloud"`
+	ID         uint32 `json:"id"`
+	Path       string `json:"path"`
+	Name       string `json:"name"`
+	Ext        string `json:"ext"`
+	MediaType  uint8  `json:"mediaType"`
+	Size       int64  `json:"size"`
+	ModTime    int64  `json:"modTime"`
+	IsCloud    bool   `json:"isCloud"`
+	IsPersonal bool   `json:"isPersonal"`
 }
 
 // PageResult represents a virtual cursor window of items.
@@ -127,6 +130,9 @@ func (idx *Indexer) Add(files []scanner.MediaFile) int {
 		var flags uint8
 		if f.IsCloud {
 			flags |= FlagIsCloud
+		}
+		if scanner.IsPersonalMedia(f.Ext) {
+			flags |= FlagIsPersonal
 		}
 
 		recIdx := uint32(len(idx.records))
@@ -197,14 +203,15 @@ func (idx *Indexer) GetByID(id uint32) (ItemView, bool) {
 	}
 	r := &idx.records[recIdx]
 	return ItemView{
-		ID:        r.ID,
-		Path:      idx.ResolvePath(r),
-		Name:      idx.ResolveName(r),
-		Ext:       idx.ResolveExt(r),
-		MediaType: r.MediaType,
-		Size:      r.Size,
-		ModTime:   r.ModTime,
-		IsCloud:   (r.Flags & FlagIsCloud) != 0,
+		ID:         r.ID,
+		Path:       idx.ResolvePath(r),
+		Name:       idx.ResolveName(r),
+		Ext:        idx.ResolveExt(r),
+		MediaType:  r.MediaType,
+		Size:       r.Size,
+		ModTime:    r.ModTime,
+		IsCloud:    (r.Flags & FlagIsCloud) != 0,
+		IsPersonal: (r.Flags & FlagIsPersonal) != 0,
 	}, true
 }
 
@@ -221,14 +228,15 @@ func (idx *Indexer) GetByPath(path string) (ItemView, bool) {
 	recIdx := idx.idLookup[id]
 	r := &idx.records[recIdx]
 	return ItemView{
-		ID:        r.ID,
-		Path:      idx.ResolvePath(r),
-		Name:      idx.ResolveName(r),
-		Ext:       idx.ResolveExt(r),
-		MediaType: r.MediaType,
-		Size:      r.Size,
-		ModTime:   r.ModTime,
-		IsCloud:   (r.Flags & FlagIsCloud) != 0,
+		ID:         r.ID,
+		Path:       idx.ResolvePath(r),
+		Name:       idx.ResolveName(r),
+		Ext:        idx.ResolveExt(r),
+		MediaType:  r.MediaType,
+		Size:       r.Size,
+		ModTime:    r.ModTime,
+		IsCloud:    (r.Flags & FlagIsCloud) != 0,
+		IsPersonal: (r.Flags & FlagIsPersonal) != 0,
 	}, true
 }
 
@@ -325,6 +333,11 @@ func (idx *Indexer) searchAndSortLocked(q Query, s SortConfig) []uint32 {
 
 				// Media type filter
 				if q.MediaType != 0 && r.MediaType != q.MediaType {
+					continue
+				}
+
+				// Personal media filter
+				if q.PersonalOnly && (r.Flags&FlagIsPersonal) == 0 {
 					continue
 				}
 
@@ -432,28 +445,37 @@ func (idx *Indexer) GetPage(q Query, s SortConfig, offset int, limit int) PageRe
 	if limit <= 0 {
 		limit = 100
 	}
+	if limit > 10000 {
+		limit = 10000
+	}
 
 	start := offset
 	if start > total {
 		start = total
 	}
 	end := start + limit
-	if end > total {
+	if end < start || end > total {
 		end = total
 	}
 
-	items := make([]ItemView, 0, end-start)
+	count := end - start
+	if count < 0 {
+		count = 0
+	}
+
+	items := make([]ItemView, 0, count)
 	for i := start; i < end; i++ {
 		r := &idx.records[matchedIndices[i]]
 		items = append(items, ItemView{
-			ID:        r.ID,
-			Path:      idx.ResolvePath(r),
-			Name:      idx.ResolveName(r),
-			Ext:       idx.ResolveExt(r),
-			MediaType: r.MediaType,
-			Size:      r.Size,
-			ModTime:   r.ModTime,
-			IsCloud:   (r.Flags & FlagIsCloud) != 0,
+			ID:         r.ID,
+			Path:       idx.ResolvePath(r),
+			Name:       idx.ResolveName(r),
+			Ext:        idx.ResolveExt(r),
+			MediaType:  r.MediaType,
+			Size:       r.Size,
+			ModTime:    r.ModTime,
+			IsCloud:    (r.Flags & FlagIsCloud) != 0,
+			IsPersonal: (r.Flags & FlagIsPersonal) != 0,
 		})
 	}
 
@@ -463,4 +485,55 @@ func (idx *Indexer) GetPage(q Query, s SortConfig, offset int, limit int) PageRe
 		Limit:      limit,
 		Items:      items,
 	}
+}
+
+// GetByRecordIndex returns an ItemView for the internal record index.
+func (idx *Indexer) GetByRecordIndex(recIdx uint32) (ItemView, bool) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	if int(recIdx) >= len(idx.records) {
+		return ItemView{}, false
+	}
+	r := &idx.records[recIdx]
+	return ItemView{
+		ID:         r.ID,
+		Path:       idx.ResolvePath(r),
+		Name:       idx.ResolveName(r),
+		Ext:        idx.ResolveExt(r),
+		MediaType:  r.MediaType,
+		Size:       r.Size,
+		ModTime:    r.ModTime,
+		IsCloud:    (r.Flags & FlagIsCloud) != 0,
+		IsPersonal: (r.Flags & FlagIsPersonal) != 0,
+	}, true
+}
+
+// GetMatchingItems returns full ItemViews for all records matching the query up to maxItems.
+func (idx *Indexer) GetMatchingItems(q Query, s SortConfig, maxItems int) []ItemView {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	matchedIndices := idx.searchAndSortLocked(q, s)
+	total := len(matchedIndices)
+	if maxItems > 0 && total > maxItems {
+		total = maxItems
+	}
+
+	items := make([]ItemView, total)
+	for i := 0; i < total; i++ {
+		r := &idx.records[matchedIndices[i]]
+		items[i] = ItemView{
+			ID:         r.ID,
+			Path:       idx.ResolvePath(r),
+			Name:       idx.ResolveName(r),
+			Ext:        idx.ResolveExt(r),
+			MediaType:  r.MediaType,
+			Size:       r.Size,
+			ModTime:    r.ModTime,
+			IsCloud:    (r.Flags & FlagIsCloud) != 0,
+			IsPersonal: (r.Flags & FlagIsPersonal) != 0,
+		}
+	}
+	return items
 }

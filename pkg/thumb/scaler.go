@@ -30,36 +30,42 @@ const (
 // DecodeAndScaleImage decodes an image with decompression-bomb protection and downscales it to fit
 // within targetW x targetH while preserving aspect ratio.
 func DecodeAndScaleImage(filePath string, targetW, targetH int) ([]byte, error) {
+	data, _, err := DecodeScaleAndHash(filePath, targetW, targetH)
+	return data, err
+}
+
+// DecodeScaleAndHash decodes, scales, and computes a 64-bit dHash perceptual hash.
+func DecodeScaleAndHash(filePath string, targetW, targetH int) ([]byte, uint64, error) {
 	f, err := os.Open(winapi.ToExtendedPath(filePath))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
 	// 1. Check dimensions first without allocating full pixel buffer
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if cfg.Width <= 0 || cfg.Height <= 0 {
-		return nil, errUnsupportedFormat
+		return nil, 0, errUnsupportedFormat
 	}
 
 	if cfg.Width > MaxSafeDimension || cfg.Height > MaxSafeDimension ||
 		int64(cfg.Width)*int64(cfg.Height) > MaxSafePixels {
-		return nil, errDecompressionBomb
+		return nil, 0, errDecompressionBomb
 	}
 
 	// Rewind file pointer
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// 2. Full decode
 	srcImg, _, err := image.Decode(f)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// 3. Compute target dimensions
@@ -67,7 +73,7 @@ func DecodeAndScaleImage(filePath string, targetW, targetH int) ([]byte, error) 
 	origH := srcImg.Bounds().Dy()
 
 	if origW <= 0 || origH <= 0 {
-		return nil, errUnsupportedFormat
+		return nil, 0, errUnsupportedFormat
 	}
 
 	scale := math.Min(float64(targetW)/float64(origW), float64(targetH)/float64(origH))
@@ -87,14 +93,17 @@ func DecodeAndScaleImage(filePath string, targetW, targetH int) ([]byte, error) 
 	// 4. Downscale using bilinear resampling
 	dstImg := scaleBilinear(srcImg, newW, newH)
 
+	// Compute dHash directly from resized RGBA buffer (~530ns, 0 allocs)
+	hash := DHash64(dstImg)
+
 	// 5. Encode as JPEG Q=80
 	var out bytes.Buffer
 	err = jpeg.Encode(&out, dstImg, &jpeg.Options{Quality: 80})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return out.Bytes(), nil
+	return out.Bytes(), hash, nil
 }
 
 // scaleBilinear performs fast bilinear interpolation from src to a new RGBA image.

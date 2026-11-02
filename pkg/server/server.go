@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -10,10 +11,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/Koality-Assured/koality-image-find/pkg/cache"
+	"github.com/Koality-Assured/koality-image-find/pkg/dedup"
 	"github.com/Koality-Assured/koality-image-find/pkg/indexer"
 	"github.com/Koality-Assured/koality-image-find/pkg/scanner"
 	"github.com/Koality-Assured/koality-image-find/pkg/thumb"
@@ -38,6 +43,14 @@ type Server struct {
 	httpServer *http.Server
 	token      string
 	mu         sync.RWMutex
+
+	// Background deduplication hashing progress
+	dedupMu        sync.Mutex
+	dedupRunning   bool
+	dedupTotal     int64
+	dedupProcessed atomic.Int64
+	dedupCancel    context.CancelFunc
+	dedupWg        sync.WaitGroup
 }
 
 // GenerateSessionToken creates a cryptographically secure 256-bit token.
@@ -82,6 +95,9 @@ func (s *Server) Start() (string, error) {
 	mux.HandleFunc("/api/media", s.authMiddleware(s.handleMedia))
 	mux.HandleFunc("/api/action/reveal", s.authMiddleware(s.handleActionReveal))
 	mux.HandleFunc("/api/action/open", s.authMiddleware(s.handleActionOpen))
+	mux.HandleFunc("/api/duplicates", s.authMiddleware(s.handleDuplicates))
+	mux.HandleFunc("/api/dedup/compute", s.authMiddleware(s.handleDedupCompute))
+	mux.HandleFunc("/api/dedup/status", s.authMiddleware(s.handleDedupStatus))
 
 	// Embedded Static Frontend
 	if s.config.StaticFS != nil {
@@ -103,8 +119,15 @@ func (s *Server) Start() (string, error) {
 	return "http://" + addr, nil
 }
 
-// Close stops the HTTP server.
+// Close stops the HTTP server and cancels active background tasks.
 func (s *Server) Close() error {
+	s.dedupMu.Lock()
+	if s.dedupCancel != nil {
+		s.dedupCancel()
+	}
+	s.dedupMu.Unlock()
+	s.dedupWg.Wait()
+
 	if s.httpServer != nil {
 		return s.httpServer.Close()
 	}
@@ -201,6 +224,8 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	searchText := q.Get("q")
 	mediaTypeStr := q.Get("type")
 	ext := q.Get("ext")
+	presetStr := q.Get("preset")
+	personalStr := q.Get("personal")
 	sortFieldStr := q.Get("sort")
 	sortOrderStr := q.Get("order")
 	offset, _ := strconv.Atoi(q.Get("offset"))
@@ -212,6 +237,8 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	} else if mediaTypeStr == "video" {
 		mediaType = scanner.MediaTypeVideo
 	}
+
+	personalOnly := presetStr == "personal" || personalStr == "1" || personalStr == "true"
 
 	var sortField uint8
 	switch sortFieldStr {
@@ -235,9 +262,10 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := indexer.Query{
-		SearchText: searchText,
-		MediaType:  mediaType,
-		Extension:  ext,
+		SearchText:   searchText,
+		MediaType:    mediaType,
+		Extension:    ext,
+		PersonalOnly: personalOnly,
 	}
 	sortConfig := indexer.SortConfig{
 		Field: sortField,
@@ -262,6 +290,12 @@ func (s *Server) handleThumbnail(w http.ResponseWriter, r *http.Request) {
 	item, found := s.config.Indexer.GetByID(id)
 	if !found {
 		http.Error(w, "item not found in index", http.StatusNotFound)
+		return
+	}
+
+	// Security: Prevent full media streaming if cloud placeholder to prevent accidental downloads
+	if item.IsCloud {
+		http.Error(w, "cloud placeholder media cannot be streamed without hydration", http.StatusGone)
 		return
 	}
 
@@ -301,6 +335,12 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	item, found := s.config.Indexer.GetByID(id)
 	if !found {
 		http.Error(w, "item not found in index", http.StatusNotFound)
+		return
+	}
+
+	// Security: Prevent full media streaming if cloud placeholder to prevent accidental downloads
+	if item.IsCloud {
+		http.Error(w, "cloud placeholder media cannot be streamed without hydration", http.StatusGone)
 		return
 	}
 
@@ -388,4 +428,261 @@ func (s *Server) handleActionOpen(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// DuplicatesResponse represents the cluster analysis and statistics payload.
+type DuplicatesResponse struct {
+	TotalItems           int             `json:"totalItems"`
+	HashedItems          int             `json:"hashedItems"`
+	Computing            bool            `json:"computing"`
+	TotalClusters        int             `json:"totalClusters"`
+	TotalDuplicates      int             `json:"totalDuplicates"`
+	TotalReclaimableSize int64           `json:"totalReclaimableSize"`
+	Offset               int             `json:"offset"`
+	Limit                int             `json:"limit"`
+	Clusters             []dedup.Cluster `json:"clusters"`
+}
+
+func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	searchText := q.Get("q")
+	mediaTypeStr := q.Get("type")
+	ext := q.Get("ext")
+	presetStr := q.Get("preset")
+	personalStr := q.Get("personal")
+	thresholdStr := q.Get("threshold")
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	computeStr := q.Get("compute")
+
+	threshold := 4 // Default: near-duplicate
+	if thresholdStr != "" {
+		if t, err := strconv.Atoi(thresholdStr); err == nil && t >= 0 && t <= 64 {
+			threshold = t
+		}
+	}
+
+	var mediaType uint8
+	if mediaTypeStr == "image" {
+		mediaType = scanner.MediaTypeImage
+	} else if mediaTypeStr == "video" {
+		mediaType = scanner.MediaTypeVideo
+	}
+
+	personalOnly := presetStr == "personal" || personalStr == "1" || personalStr == "true"
+
+	query := indexer.Query{
+		SearchText:   searchText,
+		MediaType:    mediaType,
+		Extension:    ext,
+		PersonalOnly: personalOnly,
+	}
+
+	// 1. Fetch matching items (bounded to max 25,000 for sub-second clustering)
+	matchedItems := s.config.Indexer.GetMatchingItems(query, indexer.SortConfig{}, 25000)
+	totalMatched := len(matchedItems)
+	if totalMatched == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(DuplicatesResponse{Limit: limit})
+		return
+	}
+
+	hashes := make([]uint64, totalMatched)
+	hasHash := make([]bool, totalMatched)
+	var unhashedIndices []int
+	hashedCount := 0
+
+	cacheInstance := s.config.Pipeline.Cache()
+
+	for i, it := range matchedItems {
+		if cacheInstance != nil {
+			key := cache.GenerateKey(it.Path, it.Size, it.ModTime)
+			if h, found := cacheInstance.GetHash(key); found {
+				hashes[i] = h
+				hasHash[i] = true
+				hashedCount++
+				continue
+			}
+		}
+		unhashedIndices = append(unhashedIndices, i)
+	}
+
+	// 2. Compute missing hashes on-demand if compute=1 or small candidate pool (<= 120 items)
+	shouldCompute := computeStr == "1" || computeStr == "true" || (len(unhashedIndices) > 0 && len(unhashedIndices) <= 120)
+	if shouldCompute && len(unhashedIndices) > 0 {
+		// If set is small (<= 250 items), compute synchronously
+		if len(unhashedIndices) <= 250 {
+			numWorkers := runtime.NumCPU()
+			if numWorkers > 8 {
+				numWorkers = 8
+			}
+			workCh := make(chan int, len(unhashedIndices))
+			for _, idx := range unhashedIndices {
+				workCh <- idx
+			}
+			close(workCh)
+
+			reqCtx := r.Context()
+			var wg sync.WaitGroup
+			for wIdx := 0; wIdx < numWorkers; wIdx++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for i := range workCh {
+						select {
+						case <-reqCtx.Done():
+							return
+						default:
+						}
+						it := matchedItems[i]
+						if it.IsCloud {
+							continue
+						}
+						h, err := s.config.Pipeline.ExtractHash(it.Path, it.MediaType, it.Size, it.ModTime)
+						if err == nil {
+							hashes[i] = h
+							hasHash[i] = true
+						}
+					}
+				}()
+			}
+			wg.Wait()
+
+			// Recalculate hashedCount
+			hashedCount = 0
+			for _, valid := range hasHash {
+				if valid {
+					hashedCount++
+				}
+			}
+		} else {
+			// Trigger background computation
+			s.startBackgroundHashing(matchedItems, unhashedIndices)
+		}
+	}
+
+	// 3. Cluster items using MIH and DSU
+	clusters := dedup.ClusterItems(matchedItems, hashes, hasHash, threshold)
+	paginated := dedup.PaginateClusters(clusters, offset, limit)
+
+	s.dedupMu.Lock()
+	isComputing := s.dedupRunning
+	s.dedupMu.Unlock()
+
+	resp := DuplicatesResponse{
+		TotalItems:           totalMatched,
+		HashedItems:          hashedCount,
+		Computing:            isComputing,
+		TotalClusters:        paginated.TotalClusters,
+		TotalDuplicates:      paginated.TotalDuplicates,
+		TotalReclaimableSize: paginated.TotalReclaimableSize,
+		Offset:               paginated.Offset,
+		Limit:                paginated.Limit,
+		Clusters:             paginated.Clusters,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) startBackgroundHashing(items []indexer.ItemView, unhashed []int) {
+	s.dedupMu.Lock()
+	if s.dedupRunning {
+		s.dedupMu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.dedupCancel = cancel
+	s.dedupRunning = true
+	s.dedupTotal = int64(len(unhashed))
+	s.dedupProcessed.Store(0)
+	s.dedupWg.Add(1)
+	s.dedupMu.Unlock()
+
+	go func() {
+		defer func() {
+			s.dedupMu.Lock()
+			s.dedupRunning = false
+			s.dedupCancel = nil
+			s.dedupMu.Unlock()
+			s.dedupWg.Done()
+		}()
+
+		numWorkers := runtime.NumCPU()
+		if numWorkers > 8 {
+			numWorkers = 8
+		}
+
+		workCh := make(chan int, len(unhashed))
+		for _, idx := range unhashed {
+			workCh <- idx
+		}
+		close(workCh)
+
+		var workerWg sync.WaitGroup
+		for wIdx := 0; wIdx < numWorkers; wIdx++ {
+			workerWg.Add(1)
+			go func() {
+				defer workerWg.Done()
+				for i := range workCh {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+
+					it := items[i]
+					if !it.IsCloud {
+						_, _ = s.config.Pipeline.ExtractHash(it.Path, it.MediaType, it.Size, it.ModTime)
+					}
+					s.dedupProcessed.Add(1)
+				}
+			}()
+		}
+		workerWg.Wait()
+	}()
+}
+
+func (s *Server) handleDedupCompute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Cancel bool `json:"cancel"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	if req.Cancel {
+		s.dedupMu.Lock()
+		if s.dedupCancel != nil {
+			s.dedupCancel()
+		}
+		s.dedupMu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "cancellation initiated"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleDedupStatus(w http.ResponseWriter, r *http.Request) {
+	s.dedupMu.Lock()
+	running := s.dedupRunning
+	total := s.dedupTotal
+	s.dedupMu.Unlock()
+
+	resp := map[string]interface{}{
+		"running":   running,
+		"total":     total,
+		"processed": s.dedupProcessed.Load(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }
