@@ -62,6 +62,31 @@ func TestIndexerBasic(t *testing.T) {
 	if len(pageSorted.Items) > 0 && pageSorted.Items[0].Name != "sunset.mp4" {
 		t.Errorf("Expected largest file to be sunset.mp4 (10MB), got %s", pageSorted.Items[0].Name)
 	}
+
+	// Test Personal Media filter
+	// Add an icon (.ico) and a system asset (.svg) which should NOT be considered personal media
+	nonPersonalFiles := []scanner.MediaFile{
+		{Path: `C:\Windows\app.ico`, Name: `app.ico`, Ext: `.ico`, MediaType: scanner.MediaTypeImage, Size: 5000, ModTime: 1700000000},
+		{Path: `C:\Windows\vector.svg`, Name: `vector.svg`, Ext: `.svg`, MediaType: scanner.MediaTypeImage, Size: 8000, ModTime: 1700000000},
+	}
+	idx.Add(nonPersonalFiles)
+
+	if idx.Count() != 6 {
+		t.Fatalf("Expected 6 total items, got %d", idx.Count())
+	}
+
+	pagePersonal := idx.GetPage(Query{PersonalOnly: true}, SortConfig{}, 0, 10)
+	if pagePersonal.TotalCount != 4 {
+		t.Errorf("Expected 4 personal items (jpg, png, mp4, mov), got %d", pagePersonal.TotalCount)
+	}
+	for _, it := range pagePersonal.Items {
+		if it.Ext == ".ico" || it.Ext == ".svg" {
+			t.Errorf("Non-personal item returned in personal filter: %s", it.Name)
+		}
+		if !it.IsPersonal {
+			t.Errorf("Expected item %s to have IsPersonal=true", it.Name)
+		}
+	}
 }
 
 func BenchmarkIndexerSearch100k(b *testing.B) {

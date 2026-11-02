@@ -124,3 +124,30 @@ func TestPipelineWithCache(t *testing.T) {
 		t.Errorf("Mime differs")
 	}
 }
+
+func TestDHashNonZeroBounds(t *testing.T) {
+	// Create an image with a non-zero origin: Rect(50, 100, 250, 300)
+	rect := image.Rect(50, 100, 250, 300)
+	img := image.NewRGBA(rect)
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			// Alternating pattern ensures gradients in both directions
+			val := uint8(0)
+			if ((x/16) + (y/16))%2 == 0 {
+				val = 255
+			}
+			img.Set(x, y, color.RGBA{R: val, G: val, B: val, A: 255})
+		}
+	}
+
+	hash := DHash64(img)
+	if hash == 0 {
+		t.Fatalf("Expected non-zero dHash for patterned image with non-zero bounds, got 0")
+	}
+
+	// Verify generic DHash64Image produces the exact same hash
+	hashGeneric := DHash64Image(img)
+	if hash != hashGeneric {
+		t.Errorf("DHash64 (%x) != DHash64Image (%x)", hash, hashGeneric)
+	}
+}

@@ -7,14 +7,15 @@
 bin/
 dist/
 
-# Test artifacts
+# Test artifacts & logs
 *.test
 *.out
+*.log
 coverage.html
 
 # Cache & Data
-data/
-cache/
+/data/
+/cache/
 *.db
 *.bolt
 

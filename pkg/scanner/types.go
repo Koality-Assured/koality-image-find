@@ -70,7 +70,40 @@ var (
 		".mts":  true,
 		".3gp":  true,
 	}
+
+	// personalMediaExtensions defines common media types people normally shoot,
+	// record, or save themselves (photos, phone videos, camera RAW, webm/gif clips).
+	// Excludes OS icons, vector SVG assets, legacy/system formats, and intermediate files.
+	personalMediaExtensions = map[string]bool{
+		// Common photo formats
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".gif":  true,
+		".webp": true,
+		".heic": true,
+		".heif": true,
+		".dng":  true,
+		".cr2":  true,
+		".nef":  true,
+		".arw":  true,
+		// Common video formats
+		".mp4":  true,
+		".mov":  true,
+		".webm": true,
+		".mkv":  true,
+		".m4v":  true,
+	}
 )
+
+// IsPersonalMedia returns true if the extension belongs to common personal camera/phone media.
+func IsPersonalMedia(ext string) bool {
+	lower := strings.ToLower(ext)
+	if !strings.HasPrefix(lower, ".") {
+		lower = "." + lower
+	}
+	return personalMediaExtensions[lower]
+}
 
 // ClassifyExtension identifies whether an extension corresponds to an image, video, or unknown format.
 func ClassifyExtension(ext string) (mediaType uint8, normalizedExt string) {
