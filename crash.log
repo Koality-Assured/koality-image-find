@@ -1,0 +1,10 @@
+2026/11/02 15:42:24 ==================================================
+2026/11/02 15:42:24   koality-image-find: Ultra-Fast Media Viewer
+2026/11/02 15:42:24 ==================================================
+2026/11/02 15:42:24 [Init] Cache directory: C:\Users\Robbie\AppData\Local\koality-image-find\cache
+2026/11/02 15:42:24 [Config] Scan roots: [C:\]
+2026/11/02 15:42:24 [Server] Authenticated loopback listening at: http://127.0.0.1:59932
+2026/11/02 15:42:24 [Security] Session token initialized (256-bit protected)
+2026/11/02 15:42:24 [Scanner] Starting traversal across 1 roots...
+2026/11/02 15:42:24 [UI] Launched native Edge desktop app window
+2026/11/02 15:42:38 [Scanner] Finished in 14.2388999s: found 100350 images, 61738 videos in 419420 folders.

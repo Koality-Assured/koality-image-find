@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Koality-Assured/koality-image-find/frontend"
 	"github.com/Koality-Assured/koality-image-find/pkg/cache"
@@ -72,7 +73,10 @@ func main() {
 	var roots []string
 	if rootsFlag != "" {
 		for _, r := range strings.Split(rootsFlag, ",") {
-			r = strings.TrimSpace(r)
+			r = strings.Trim(strings.TrimSpace(r), `"'`)
+			if len(r) == 2 && r[1] == ':' {
+				r = r + `\`
+			}
 			if r != "" {
 				roots = append(roots, r)
 			}
@@ -116,8 +120,9 @@ func main() {
 		currentCancel = cancel
 		scanMu.Unlock()
 
+		var lastLogTime time.Time
 		go func() {
-			log.Printf("[Scanner] Starting traversal across %d roots...\n", len(targetRoots))
+			log.Printf("[Scanner] Starting traversal across %d roots: %v\n", len(targetRoots), targetRoots)
 			s := scanner.New(scanner.ScannerConfig{
 				Roots:        targetRoots,
 				MaxWorkers:   workersFlag,
@@ -127,6 +132,12 @@ func main() {
 					statsMu.Lock()
 					currentScanStats = stats
 					statsMu.Unlock()
+
+					if time.Since(lastLogTime) > 2*time.Second {
+						lastLogTime = time.Now()
+						log.Printf("[Scanner] Progress: %d folders scanned | %d images | %d videos\n",
+							stats.FoldersScanned, stats.ImagesFound, stats.VideosFound)
+					}
 				},
 			})
 
@@ -168,8 +179,9 @@ func main() {
 	defer srv.Close()
 
 	appURL := fmt.Sprintf("%s/?token=%s", serverURL, srv.Token())
-	log.Printf("[Server] Authenticated loopback listening at: %s\n", serverURL)
-	log.Printf("[Security] Session token initialized (256-bit protected)\n")
+	log.Println("==================================================")
+	log.Printf("  Viewer LIVE: %s\n", appURL)
+	log.Println("==================================================")
 
 	// Kick off initial file scan
 	startScan(roots)
@@ -192,24 +204,26 @@ func main() {
 	scanMu.Unlock()
 }
 
-// launchDesktopWindow launches Microsoft Edge in --app mode or falls back to system browser.
+// launchDesktopWindow launches Chrome/Edge in dedicated app mode or falls back to system browser.
 func launchDesktopWindow(appURL string) {
-	edgePaths := []string{
+	candidates := []string{
+		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
+		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
 		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
 		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
 	}
 
-	for _, p := range edgePaths {
+	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {
 			cmd := exec.Command(p, "--app="+appURL, "--window-size=1440,920")
 			if err := cmd.Start(); err == nil {
-				log.Printf("[UI] Launched native Edge desktop app window\n")
+				log.Printf("[UI] Launched application window (%s)\n", filepath.Base(p))
 				return
 			}
 		}
 	}
 
-	// Fallback to ShellExecute default browser
+	// Always trigger system default browser open as reliable fallback
 	log.Printf("[UI] Opening default browser at: %s\n", appURL)
 	_ = winapi.ShellExecute(0, "open", appURL, "", "", 1)
 }
