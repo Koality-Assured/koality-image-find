@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>koality-image-find | Ultra-Fast Media Viewer</title>
+  <style>
+    :root {
+      --bg-base: #0f1117;
+      --bg-surface: #181b24;
+      --bg-surface-elevated: #212634;
+      --bg-hover: #2b3245;
+      --border-subtle: #2d3448;
+      --border-focus: #3b82f6;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --video-badge: #8b5cf6;
+      --image-badge: #10b981;
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* Header Bar */
+    header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 10;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.3px;
+      color: #fff;
+    }
+
+    .brand-icon {
+      width: 22px;
+      height: 22px;
+      fill: var(--accent);
+    }
+
+    .search-container {
+      position: relative;
+      flex: 1;
+      min-width: 220px;
+      max-width: 480px;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      padding: 8px 12px 8px 34px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      fill: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      background: var(--bg-surface-elevated);
+      border-radius: var(--radius);
+      padding: 2px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .filter-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-btn:hover {
+      color: var(--text-main);
+    }
+
+    .filter-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .control-select {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .size-slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .size-slider {
+      width: 80px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* Sub-bar / Status Ribbon */
+    .status-ribbon {
+      background: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 6px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .scan-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
+    }
+
+    .pulse-dot.scanning {
+      background: #f59e0b;
+      box-shadow: 0 0 6px #f59e0b;
+      animation: pulse 1s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { opacity: 0.4; }
+      to { opacity: 1; }
+    }
+
+    /* Virtual Grid Viewport */
+    .viewport {
+      flex: 1;
+      position: relative;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0;
+      scroll-behavior: auto;
+    }
+
+    .virtual-height-spacer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      pointer-events: none;
+    }
+
+    .virtual-cards-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+      will-change: transform;
+    }
+
+    /* Card */
+    .media-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .media-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-focus);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .thumb-wrap {
+      width: 100%;
+      background: #090a0d;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .thumb-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: opacity 0.2s ease;
+    }
+
+    .thumb-img.loading {
+      opacity: 0;
+    }
+
+    .type-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #fff;
+      backdrop-filter: blur(4px);
+    }
+
+    .type-badge.video {
+      background: rgba(139, 92, 246, 0.85);
+    }
+
+    .type-badge.image {
+      background: rgba(16, 185, 129, 0.85);
+    }
+
+    .video-play-overlay {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .video-play-overlay svg {
+      width: 16px;
+      height: 16px;
+      fill: #fff;
+      margin-left: 2px;
+    }
+
+    .card-meta {
+      padding: 8px 10px;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-main);
+    }
+
+    .card-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Lightbox Modal */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 10, 15, 0.94);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+    }
+
+    .lightbox.active {
+      display: flex;
+    }
+
+    .lightbox-header {
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(24, 27, 36, 0.6);
+    }
+
+    .lightbox-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 60%;
+    }
+
+    .lightbox-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .action-btn {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .action-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+    }
+
+    .close-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .lightbox-body {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .lightbox-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      padding: 20px;
+    }
+
+    .lightbox-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+      border-radius: 4px;
+      transition: transform 0.1s ease-out;
+      cursor: grab;
+    }
+
+    .lightbox-img:active {
+      cursor: grabbing;
+    }
+
+    .lightbox-video {
+      max-width: 90%;
+      max-height: 85%;
+      border-radius: 6px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+      outline: none;
+    }
+
+    .video-codec-fallback-banner {
+      position: absolute;
+      bottom: 24px;
+      background: rgba(33, 38, 52, 0.95);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-muted);
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    .lightbox-sidebar {
+      width: 300px;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-subtle);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+
+    .meta-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .meta-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .meta-value {
+      color: var(--text-main);
+      word-break: break-all;
+    }
+
+    .nav-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      transition: all 0.15s ease;
+    }
+
+    .nav-arrow:hover {
+      background: rgba(0, 0, 0, 0.8);
+      transform: translateY(-50%) scale(1.05);
+    }
+
+    .nav-arrow.prev { left: 20px; }
+    .nav-arrow.next { right: 320px; }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 60vh;
+      color: var(--text-muted);
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24">
+        <path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm0 2v7.586l3.293-3.293a1 1 0 011.414 0L14 15.586l2.293-2.293a1 1 0 011.414 0L20 15.586V6H4zm16 12v-1.586l-4.293-4.293-2.293 2.293a1 1 0 01-1.414 0L9.414 11.414 4 16.828V18h16zM8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
+      </svg>
+      <span>koality-image-find</span>
+    </div>
+
+    <!-- Search Input -->
+    <div class="search-container">
+      <svg class="search-icon" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+      </svg>
+      <input type="text" id="searchInput" class="search-input" placeholder="Search filenames and paths across drives..." />
+    </div>
+
+    <!-- Media Filter -->
+    <div class="filter-group">
+      <button class="filter-btn active" data-type="">All</button>
+      <button class="filter-btn" data-type="image">Images</button>
+      <button class="filter-btn" data-type="video">Videos</button>
+    </div>
+
+    <!-- Sort Options -->
+    <select id="sortSelect" class="control-select">
+      <option value="date-desc">Newest First</option>
+      <option value="date-asc">Oldest First</option>
+      <option value="name-asc">Name (A to Z)</option>
+      <option value="name-desc">Name (Z to A)</option>
+      <option value="size-desc">Largest First</option>
+      <option value="size-asc">Smallest First</option>
+      <option value="type-asc">File Type</option>
+    </select>
+
+    <!-- Thumbnail Card Size Slider -->
+    <div class="size-slider-wrap">
+      <span>Size</span>
+      <input type="range" id="sizeSlider" class="size-slider" min="140" max="320" value="200" />
+    </div>
+  </header>
+
+  <!-- Status Ribbon -->
+  <div class="status-ribbon">
+    <div class="scan-pill">
+      <div id="pulseDot" class="pulse-dot"></div>
+      <span id="scanStatusText">Connecting to engine...</span>
+    </div>
+    <div id="statsSummary">0 media items</div>
+  </div>
+
+  <!-- Virtual Scrolling Viewport -->
+  <div class="viewport" id="viewport">
+    <div class="virtual-height-spacer" id="spacer"></div>
+    <div class="virtual-cards-container" id="cardsContainer"></div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div class="lightbox" id="lightbox">
+    <div class="lightbox-header">
+      <div class="lightbox-title" id="lightboxTitle">photo.jpg</div>
+      <div class="lightbox-actions">
+        <button class="action-btn" id="btnReveal">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+          Reveal in Explorer
+        </button>
+        <button class="action-btn" id="btnOpenDefault">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/></svg>
+          Open App
+        </button>
+        <button class="close-btn" id="btnCloseLightbox">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="lightbox-body">
+      <button class="nav-arrow prev" id="btnPrev">&larr;</button>
+      <div class="lightbox-stage" id="lightboxStage">
+        <img id="lightboxImg" class="lightbox-img" style="display:none;" />
+        <video id="lightboxVideo" class="lightbox-video" controls autoplay loop style="display:none;"></video>
+        <div id="videoFallbackBanner" class="video-codec-fallback-banner" style="display:none;">
+          <span>Notice: This video format may require system media codecs.</span>
+          <button class="action-btn" id="btnBannerOpen">Open in System Player</button>
+        </div>
+      </div>
+      <button class="nav-arrow next" id="btnNext">&rarr;</button>
+
+      <!-- Sidebar -->
+      <div class="lightbox-sidebar">
+        <div class="meta-group">
+          <div class="meta-label">File Name</div>
+          <div class="meta-value" id="metaName">-</div>
+        </div>
+        <div class="meta-group">
+          <div class="meta-label">Path</div>
+          <div class="meta-value" id="metaPath" style="font-size:11px; word-break:break-all;">-</div>
+        </div>
+        <div class="meta-group">
+          <div class="meta-label">File Size</div>
+          <div class="meta-value" id="metaSize">-</div>
+        </div>
+        <div class="meta-group">
+          <div class="meta-label">Modified Date</div>
+          <div class="meta-value" id="metaDate">-</div>
+        </div>
+        <div class="meta-group">
+          <div class="meta-label">Format</div>
+          <div class="meta-value" id="metaType">-</div>
+        </div>
+        <button class="action-btn" id="btnCopyPath" style="margin-top:auto;">
+          📋 Copy Full Path
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Extract session token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('token') || '';
+
+    // State
+    let currentFilterType = '';
+    let currentSearch = '';
+    let currentSortField = 'date';
+    let currentSortOrder = 'desc';
+    let cardSize = 200;
+    const cardGap = 14;
+    const cardLabelHeight = 44;
+
+    let totalItemCount = 0;
+    let activeLightboxItem = null;
+    let activeLightboxIndex = -1;
+
+    // Cache of fetched items for fast viewport rendering
+    const itemCache = new Map(); // id -> item
+    let visibleIndicesMap = new Map(); // indexInQuery -> item
+
+    // DOM Elements
+    const viewport = document.getElementById('viewport');
+    const spacer = document.getElementById('spacer');
+    const cardsContainer = document.getElementById('cardsContainer');
+    const searchInput = document.getElementById('searchInput');
+    const sortSelect = document.getElementById('sortSelect');
+    const sizeSlider = document.getElementById('sizeSlider');
+    const scanStatusText = document.getElementById('scanStatusText');
+    const pulseDot = document.getElementById('pulseDot');
+    const statsSummary = document.getElementById('statsSummary');
+
+    // Lightbox Elements
+    const lightbox = document.getElementById('lightbox');
+    const lightboxTitle = document.getElementById('lightboxTitle');
+    const lightboxImg = document.getElementById('lightboxImg');
+    const lightboxVideo = document.getElementById('lightboxVideo');
+    const videoFallbackBanner = document.getElementById('videoFallbackBanner');
+    const metaName = document.getElementById('metaName');
+    const metaPath = document.getElementById('metaPath');
+    const metaSize = document.getElementById('metaSize');
+    const metaDate = document.getElementById('metaDate');
+    const metaType = document.getElementById('metaType');
+
+    // Utility: Format file size
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Utility: Format Date
+    function formatDate(unixSec) {
+      if (!unixSec) return '-';
+      const d = new Date(unixSec * 1000);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Fetch helper with session token
+    async function apiFetch(endpoint, options = {}) {
+      const headers = options.headers || {};
+      headers['X-Session-Token'] = sessionToken;
+      options.headers = headers;
+      return fetch(endpoint, options);
+    }
+
+    // Mathematical O(1) Virtual Grid Layout Math
+    function getGridGeometry() {
+      const containerWidth = viewport.clientWidth - 32; // minus padding
+      const colWidth = cardSize + cardGap;
+      const cols = Math.max(1, Math.floor(containerWidth / colWidth));
+      const rowHeight = cardSize + cardLabelHeight + cardGap;
+      const totalRows = Math.ceil(totalItemCount / cols);
+      const totalHeight = totalRows * rowHeight;
+      return { cols, rowHeight, totalRows, totalHeight };
+    }
+
+    let isFetching = false;
+    let pendingFetchTimeout = null;
+
+    async function updateVirtualGrid() {
+      const { cols, rowHeight, totalHeight } = getGridGeometry();
+      spacer.style.height = totalHeight + 'px';
+
+      cardsContainer.style.gridTemplateColumns = `repeat(${cols}, ${cardSize}px)`;
+
+      const scrollTop = viewport.scrollTop;
+      const viewportHeight = viewport.clientHeight;
+
+      const overscanRows = 2;
+      const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - overscanRows);
+      const endRow = Math.min(Math.ceil(totalItemCount / cols), Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscanRows);
+
+      const startIndex = startRow * cols;
+      const endIndex = Math.min(totalItemCount, endRow * cols);
+
+      // Translate visible window
+      const translateY = startRow * rowHeight;
+      cardsContainer.style.transform = `translateY(${translateY}px)`;
+
+      // Identify missing items
+      let hasMissing = false;
+      for (let i = startIndex; i < endIndex; i++) {
+        if (!visibleIndicesMap.has(i)) {
+          hasMissing = true;
+          break;
+        }
+      }
+
+      if (hasMissing && !isFetching) {
+        clearTimeout(pendingFetchTimeout);
+        pendingFetchTimeout = setTimeout(() => {
+          fetchRange(startIndex, endIndex - startIndex);
+        }, 16);
+      }
+
+      // Render cards
+      renderCards(startIndex, endIndex);
+    }
+
+    async function fetchRange(offset, limit) {
+      if (isFetching) return;
+      isFetching = true;
+
+      const queryParams = new URLSearchParams({
+        q: currentSearch,
+        type: currentFilterType,
+        sort: currentSortField,
+        order: currentSortOrder,
+        offset: offset.toString(),
+        limit: Math.max(limit, 100).toString(),
+        token: sessionToken
+      });
+
+      try {
+        const resp = await apiFetch(`/api/items?${queryParams}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          totalItemCount = data.totalCount;
+          statsSummary.textContent = `${totalItemCount.toLocaleString()} items`;
+
+          data.items.forEach((item, idx) => {
+            const absoluteIdx = offset + idx;
+            visibleIndicesMap.set(absoluteIdx, item);
+            itemCache.set(item.id, item);
+          });
+
+          const { totalHeight } = getGridGeometry();
+          spacer.style.height = totalHeight + 'px';
+          renderCards(offset, offset + data.items.length);
+        }
+      } catch (err) {
+        console.error('Fetch items error:', err);
+      } finally {
+        isFetching = false;
+      }
+    }
+
+    function renderCards(startIndex, endIndex) {
+      const fragment = document.createDocumentFragment();
+
+      for (let i = startIndex; i < endIndex; i++) {
+        const item = visibleIndicesMap.get(i);
+        if (!item) {
+          // Skeleton placeholder card
+          const placeholder = document.createElement('div');
+          placeholder.className = 'media-card';
+          placeholder.style.height = (cardSize + cardLabelHeight) + 'px';
+          fragment.appendChild(placeholder);
+          continue;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'media-card';
+        card.style.height = (cardSize + cardLabelHeight) + 'px';
+        card.onclick = () => openLightbox(item, i);
+
+        const thumbWrap = document.createElement('div');
+        thumbWrap.className = 'thumb-wrap';
+        thumbWrap.style.height = cardSize + 'px';
+
+        const img = document.createElement('img');
+        img.className = 'thumb-img';
+        img.loading = 'lazy';
+        img.src = `/api/thumbnail?id=${item.id}&size=${cardSize}&token=${sessionToken}`;
+        thumbWrap.appendChild(img);
+
+        // Badge
+        const badge = document.createElement('div');
+        badge.className = 'type-badge ' + (item.mediaType === 2 ? 'video' : 'image');
+        badge.textContent = item.ext.replace('.', '');
+        thumbWrap.appendChild(badge);
+
+        if (item.mediaType === 2) {
+          const playOverlay = document.createElement('div');
+          playOverlay.className = 'video-play-overlay';
+          playOverlay.innerHTML = '<svg viewBox="0 0 20 20"><path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.34-5.89a1.5 1.5 0 000-2.54L6.3 2.84z"/></svg>';
+          thumbWrap.appendChild(playOverlay);
+        }
+
+        card.appendChild(thumbWrap);
+
+        // Meta info
+        const meta = document.createElement('div');
+        meta.className = 'card-meta';
+        meta.innerHTML = `
+          <div class="card-title" title="${item.name}">${item.name}</div>
+          <div class="card-sub">
+            <span>${formatBytes(item.size)}</span>
+            <span>${formatDate(item.modTime).split(' ')[0]}</span>
+          </div>
+        `;
+        card.appendChild(meta);
+
+        fragment.appendChild(card);
+      }
+
+      cardsContainer.innerHTML = '';
+      cardsContainer.appendChild(fragment);
+    }
+
+    // Status polling
+    async function pollStatus() {
+      try {
+        const resp = await apiFetch('/api/status');
+        if (resp.ok) {
+          const stats = await resp.json();
+          if (stats.scanComplete) {
+            pulseDot.className = 'pulse-dot';
+            scanStatusText.textContent = `Indexed ${stats.totalIndexed.toLocaleString()} files across drives`;
+          } else {
+            pulseDot.className = 'pulse-dot scanning';
+            scanStatusText.textContent = `Scanning drive... (${stats.imagesFound.toLocaleString()} images, ${stats.videosFound.toLocaleString()} videos)`;
+          }
+
+          if (totalItemCount === 0 && stats.totalIndexed > 0) {
+            totalItemCount = stats.totalIndexed;
+            updateVirtualGrid();
+          }
+        }
+      } catch (err) {
+        scanStatusText.textContent = 'Disconnected';
+      }
+    }
+
+    // Lightbox Controls
+    function openLightbox(item, index) {
+      activeLightboxItem = item;
+      activeLightboxIndex = index;
+
+      lightboxTitle.textContent = item.name;
+      metaName.textContent = item.name;
+      metaPath.textContent = item.path;
+      metaSize.textContent = formatBytes(item.size);
+      metaDate.textContent = formatDate(item.modTime);
+      metaType.textContent = (item.mediaType === 2 ? 'Video' : 'Image') + ' (' + item.ext + ')';
+
+      const mediaUrl = `/api/media?id=${item.id}&token=${sessionToken}`;
+
+      if (item.mediaType === 2) {
+        lightboxImg.style.display = 'none';
+        lightboxVideo.style.display = 'block';
+        lightboxVideo.src = mediaUrl;
+
+        // Show fallback banner for formats Chromium may reject
+        const ext = item.ext.toLowerCase();
+        if (ext === '.mkv' || ext === '.avi' || ext === '.wmv' || ext === '.flv') {
+          videoFallbackBanner.style.display = 'flex';
+        } else {
+          videoFallbackBanner.style.display = 'none';
+        }
+      } else {
+        lightboxVideo.style.display = 'none';
+        videoFallbackBanner.style.display = 'none';
+        lightboxVideo.pause();
+        lightboxImg.style.display = 'block';
+        lightboxImg.src = mediaUrl;
+      }
+
+      lightbox.classList.add('active');
+    }
+
+    function closeLightbox() {
+      lightbox.classList.remove('active');
+      lightboxVideo.pause();
+      lightboxVideo.src = '';
+      lightboxImg.src = '';
+      activeLightboxItem = null;
+    }
+
+    function navigateLightbox(direction) {
+      const nextIdx = activeLightboxIndex + direction;
+      if (nextIdx >= 0 && nextIdx < totalItemCount) {
+        const nextItem = visibleIndicesMap.get(nextIdx);
+        if (nextItem) {
+          openLightbox(nextItem, nextIdx);
+        } else {
+          fetchRange(nextIdx, 10).then(() => {
+            const fetched = visibleIndicesMap.get(nextIdx);
+            if (fetched) openLightbox(fetched, nextIdx);
+          });
+        }
+      }
+    }
+
+    // Event Listeners
+    viewport.addEventListener('scroll', () => {
+      requestAnimationFrame(updateVirtualGrid);
+    });
+
+    window.addEventListener('resize', () => {
+      updateVirtualGrid();
+    });
+
+    // Filter Buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilterType = btn.dataset.type;
+        visibleIndicesMap.clear();
+        viewport.scrollTop = 0;
+        fetchRange(0, 100);
+      });
+    });
+
+    // Search Input (16ms debounce)
+    let searchDebounce = null;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        currentSearch = e.target.value.trim();
+        visibleIndicesMap.clear();
+        viewport.scrollTop = 0;
+        fetchRange(0, 100);
+      }, 50);
+    });
+
+    // Sort Dropdown
+    sortSelect.addEventListener('change', (e) => {
+      const parts = e.target.value.split('-');
+      currentSortField = parts[0];
+      currentSortOrder = parts[1];
+      visibleIndicesMap.clear();
+      viewport.scrollTop = 0;
+      fetchRange(0, 100);
+    });
+
+    // Slider
+    sizeSlider.addEventListener('input', (e) => {
+      cardSize = parseInt(e.target.value, 10);
+      updateVirtualGrid();
+    });
+
+    // Lightbox Buttons
+    document.getElementById('btnCloseLightbox').onclick = closeLightbox;
+    document.getElementById('btnPrev').onclick = () => navigateLightbox(-1);
+    document.getElementById('btnNext').onclick = () => navigateLightbox(1);
+
+    document.getElementById('btnReveal').onclick = async () => {
+      if (!activeLightboxItem) return;
+      await apiFetch('/api/action/reveal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeLightboxItem.id })
+      });
+    };
+
+    document.getElementById('btnOpenDefault').onclick = async () => {
+      if (!activeLightboxItem) return;
+      await apiFetch('/api/action/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeLightboxItem.id })
+      });
+    };
+
+    document.getElementById('btnBannerOpen').onclick = async () => {
+      if (!activeLightboxItem) return;
+      await apiFetch('/api/action/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeLightboxItem.id })
+      });
+    };
+
+    document.getElementById('btnCopyPath').onclick = () => {
+      if (!activeLightboxItem) return;
+      navigator.clipboard.writeText(activeLightboxItem.path).then(() => {
+        const btn = document.getElementById('btnCopyPath');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      });
+    };
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (lightbox.classList.contains('active')) {
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') navigateLightbox(-1);
+        if (e.key === 'ArrowRight') navigateLightbox(1);
+      }
+    });
+
+    // Init
+    setInterval(pollStatus, 1000);
+    pollStatus();
+    fetchRange(0, 100);
+  </script>
+</body>
+</html>
