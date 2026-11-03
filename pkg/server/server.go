@@ -497,6 +497,8 @@ type DuplicatesResponse struct {
 	TotalReclaimableSize int64           `json:"totalReclaimableSize"`
 	Offset               int             `json:"offset"`
 	Limit                int             `json:"limit"`
+	Truncated            bool            `json:"truncated"`
+	TotalCandidates      int             `json:"totalCandidates"`
 	Clusters             []dedup.Cluster `json:"clusters"`
 }
 
@@ -620,12 +622,22 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Cluster items using MIH and DSU
+	sortMode := q.Get("sort")
+	if sortMode == "" {
+		sortMode = "reclaimable"
+	}
+
 	clusters := dedup.ClusterItems(matchedItems, hashes, hasHash, threshold)
+	if sortMode != "reclaimable" {
+		dedup.SortClusters(clusters, sortMode)
+	}
 	paginated := dedup.PaginateClusters(clusters, offset, limit)
 
 	s.dedupMu.Lock()
 	isComputing := s.dedupRunning
 	s.dedupMu.Unlock()
+
+	totalInLibrary := s.config.Indexer.Count()
 
 	resp := DuplicatesResponse{
 		TotalItems:           totalMatched,
@@ -636,6 +648,8 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		TotalReclaimableSize: paginated.TotalReclaimableSize,
 		Offset:               paginated.Offset,
 		Limit:                paginated.Limit,
+		Truncated:            totalMatched >= 25000 && totalInLibrary > 25000,
+		TotalCandidates:      totalMatched,
 		Clusters:             paginated.Clusters,
 	}
 

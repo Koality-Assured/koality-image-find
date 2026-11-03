@@ -164,6 +164,12 @@ func TestServerAuthAndEndpoints(t *testing.T) {
 	if dedupResp.TotalClusters != 1 {
 		t.Errorf("Expected 1 duplicate cluster, got %d", dedupResp.TotalClusters)
 	}
+	if dedupResp.Truncated {
+		t.Errorf("Expected Truncated to be false for small dataset")
+	}
+	if dedupResp.TotalCandidates < 2 {
+		t.Errorf("Expected TotalCandidates >= 2, got %d", dedupResp.TotalCandidates)
+	}
 	if len(dedupResp.Clusters) > 0 && len(dedupResp.Clusters[0].Duplicates) != 1 {
 		t.Errorf("Expected 1 duplicate item in cluster, got %d", len(dedupResp.Clusters[0].Duplicates))
 	}

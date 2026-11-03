@@ -132,25 +132,8 @@ func ClusterItems(items []indexer.ItemView, hashes []uint64, valid []bool, thres
 		})
 	}
 
-	// Step 5: Sort clusters deterministically
-	// 1. ReclaimableSize descending
-	// 2. Count descending
-	// 3. Primary ID ascending (stable tie-breaker)
-	sort.Slice(clusters, func(i, j int) bool {
-		if clusters[i].ReclaimableSize != clusters[j].ReclaimableSize {
-			return clusters[i].ReclaimableSize > clusters[j].ReclaimableSize
-		}
-		if clusters[i].Count != clusters[j].Count {
-			return clusters[i].Count > clusters[j].Count
-		}
-		return clusters[i].Primary.ID < clusters[j].Primary.ID
-	})
-
-	// Step 6: Assign sequential IDs after final sorting
-	for i := range clusters {
-		clusters[i].ID = i + 1
-	}
-
+	// Step 5: Sort clusters deterministically with default reclaimable order
+	SortClusters(clusters, "reclaimable")
 	return clusters
 }
 
@@ -202,5 +185,38 @@ func PaginateClusters(allClusters []Cluster, offset, limit int) ClusterResult {
 		Offset:               offset,
 		Limit:                limit,
 		Clusters:             page,
+	}
+}
+
+// SortClusters sorts clusters according to the requested sort mode and re-indexes cluster IDs.
+func SortClusters(clusters []Cluster, sortMode string) {
+	sort.Slice(clusters, func(i, j int) bool {
+		switch sortMode {
+		case "count":
+			if clusters[i].Count != clusters[j].Count {
+				return clusters[i].Count > clusters[j].Count
+			}
+			return clusters[i].ReclaimableSize > clusters[j].ReclaimableSize
+		case "date_asc":
+			if clusters[i].Primary.ModTime != clusters[j].Primary.ModTime {
+				return clusters[i].Primary.ModTime < clusters[j].Primary.ModTime
+			}
+		case "date_desc":
+			if clusters[i].Primary.ModTime != clusters[j].Primary.ModTime {
+				return clusters[i].Primary.ModTime > clusters[j].Primary.ModTime
+			}
+		default: // "reclaimable"
+			if clusters[i].ReclaimableSize != clusters[j].ReclaimableSize {
+				return clusters[i].ReclaimableSize > clusters[j].ReclaimableSize
+			}
+			if clusters[i].Count != clusters[j].Count {
+				return clusters[i].Count > clusters[j].Count
+			}
+		}
+		return clusters[i].Primary.ID < clusters[j].Primary.ID
+	})
+
+	for i := range clusters {
+		clusters[i].ID = i + 1
 	}
 }
