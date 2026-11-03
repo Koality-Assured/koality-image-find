@@ -816,6 +816,100 @@
       color: var(--text-muted);
       gap: 12px;
     }
+  
+    .search-clear-btn {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .search-clear-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .filter-btn.toggle-btn {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      padding: 6px 12px;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .filter-btn.toggle-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .truncation-banner {
+      background: rgba(245, 158, 11, 0.15);
+      border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+      padding: 6px 18px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cancel-btn {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #f87171;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+    }
+
+    .cancel-btn:hover {
+      background: rgba(239, 68, 68, 0.4);
+    }
+
+    .nav-arrow:disabled {
+      opacity: 0.15;
+      cursor: not-allowed;
+      pointer-events: none;
+      transform: translateY(-50%) !important;
+    }
+
+    /* 0ms GPU Blink Diff Container */
+    .blink-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .blink-img {
+      position: absolute;
+      max-width: 90%;
+      max-height: 85%;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
+      will-change: opacity;
+    }
+
   </style>
 </head>
 <body>
@@ -840,15 +934,16 @@
         <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
       </svg>
       <input type="text" id="searchInput" class="search-input" placeholder="Search filenames and paths across drives..." />
+      <button type="button" id="btnSearchClear" class="search-clear-btn" style="display:none;" title="Clear search">✕</button>
     </div>
 
     <!-- Media Filter -->
     <div class="filter-group" id="mediaFilterGroup">
       <button class="filter-btn active" data-type="">All</button>
-      <button class="filter-btn" data-type="personal" title="Filter to common personal/camera media (jpg, png, gif, webm, mp4, mov, heic)">📸 Personal</button>
       <button class="filter-btn" data-type="image">Photos</button>
       <button class="filter-btn" data-type="video">Videos</button>
     </div>
+    <button class="filter-btn toggle-btn" id="btnTogglePersonal" title="Filter to common personal/camera media (jpg, png, gif, webm, mp4, mov, heic)">📸 Personal</button>
 
     <!-- Dedup Controls (Duplicates Mode) -->
     <div class="filter-group" id="dedupControls" style="display:none;">
@@ -885,8 +980,14 @@
     <div class="scan-pill">
       <div id="pulseDot" class="pulse-dot"></div>
       <span id="scanStatusText">Connecting to engine...</span>
+      <button id="btnCancelDedup" class="action-btn cancel-btn" style="display:none;" title="Cancel running similarity hash computation">✕ Cancel Scan</button>
     </div>
     <div id="statsSummary">0 media items</div>
+  </div>
+
+  <!-- Dedup Truncation Warning Ribbon -->
+  <div id="dedupTruncatedBanner" class="truncation-banner" style="display:none;">
+    <span>⚠️ High volume: Evaluated first 25,000 candidate items for similarity clustering to protect UI responsiveness. Filter by folder or search term to scan specific files.</span>
   </div>
 
   <!-- Virtual Scrolling Viewport -->
@@ -940,6 +1041,12 @@
               <div class="curtain-handle">&harr;</div>
             </div>
           </div>
+        </div>
+
+        <!-- 0ms GPU Blink Diff Container -->
+        <div id="blinkContainer" class="blink-container" style="display:none;">
+          <img id="blinkBaseImg" class="blink-img" />
+          <img id="blinkTopImg" class="blink-img" style="opacity: 0;" />
         </div>
 
         <!-- Side-by-Side Dual View Container -->
@@ -1009,6 +1116,18 @@
     const urlParams = new URLSearchParams(window.location.search);
     let sessionToken = urlParams.get('token') || (window.location.hash.startsWith('#token=') ? window.location.hash.substring(7) : '') || sessionStorage.getItem('koality_token') || '';
 
+    // RAW camera formats that Chromium cannot render natively without server JPEG conversion
+    const RAW_EXTS = new Set(['.cr2', '.nef', '.arw', '.dng', '.raw', '.orf', '.rw2', '.pef', '.srw', '.raf']);
+
+    function getMediaDisplayUrl(item) {
+      if (!item) return '';
+      const ext = (item.ext || '').toLowerCase();
+      if (RAW_EXTS.has(ext)) {
+        return `/api/thumbnail?id=${item.id}&size=1600&token=${sessionToken}`;
+      }
+      return `/api/media?id=${item.id}&token=${sessionToken}`;
+    }
+
     function showAuthErrorBanner() {
       let banner = document.getElementById('authErrorBanner');
       if (!banner) {
@@ -1047,10 +1166,12 @@
 
     // State
     let currentMode = 'browse'; // 'browse' | 'duplicates'
-    let currentFilterType = ''; // '' | 'personal' | 'image' | 'video'
+    let currentFilterType = ''; // '' | 'image' | 'video'
+    let isPersonalActive = false; // Multi-dimensional Personal modifier
     let currentSearch = '';
     let currentSortField = 'date';
     let currentSortOrder = 'desc';
+    let currentDedupSort = 'reclaimable'; // 'reclaimable' | 'count' | 'date_desc' | 'date_asc'
     let currentThreshold = 6;
     let cardSize = 200;
     const cardGap = 14;
@@ -1075,11 +1196,14 @@
     const spacer = document.getElementById('spacer');
     const cardsContainer = document.getElementById('cardsContainer');
     const searchInput = document.getElementById('searchInput');
+    const btnSearchClear = document.getElementById('btnSearchClear');
     const sortSelect = document.getElementById('sortSelect');
     const sizeSlider = document.getElementById('sizeSlider');
     const scanStatusText = document.getElementById('scanStatusText');
     const pulseDot = document.getElementById('pulseDot');
     const statsSummary = document.getElementById('statsSummary');
+    const btnCancelDedup = document.getElementById('btnCancelDedup');
+    const dedupTruncatedBanner = document.getElementById('dedupTruncatedBanner');
 
     // Header Mode & Dedup Controls
     const btnModeBrowse = document.getElementById('btnModeBrowse');
@@ -1087,6 +1211,7 @@
     const dedupControls = document.getElementById('dedupControls');
     const thresholdSelect = document.getElementById('thresholdSelect');
     const btnScanDuplicates = document.getElementById('btnScanDuplicates');
+    const btnTogglePersonal = document.getElementById('btnTogglePersonal');
 
     // Lightbox Elements
     const lightbox = document.getElementById('lightbox');
@@ -1099,6 +1224,8 @@
     const metaSize = document.getElementById('metaSize');
     const metaDate = document.getElementById('metaDate');
     const metaType = document.getElementById('metaType');
+    const btnPrev = document.getElementById('btnPrev');
+    const btnNext = document.getElementById('btnNext');
 
     // Comparison Controls
     const comparisonTabs = document.getElementById('comparisonTabs');
@@ -1113,6 +1240,10 @@
     const curtainFgWrap = document.getElementById('curtainFgWrap');
     const curtainFgImg = document.getElementById('curtainFgImg');
     const curtainDivider = document.getElementById('curtainDivider');
+
+    const blinkContainer = document.getElementById('blinkContainer');
+    const blinkBaseImg = document.getElementById('blinkBaseImg');
+    const blinkTopImg = document.getElementById('blinkTopImg');
 
     const sideBySideContainer = document.getElementById('sideBySideContainer');
     const sideImgPrimary = document.getElementById('sideImgPrimary');
@@ -1180,6 +1311,11 @@
 
     function pollDedupProgress() {
       if (dedupPollTimer) return;
+      if (btnCancelDedup) {
+        btnCancelDedup.style.display = 'inline-block';
+        btnCancelDedup.disabled = false;
+        btnCancelDedup.textContent = '✕ Cancel Scan';
+      }
       dedupPollTimer = setInterval(async () => {
         try {
           const resp = await apiFetch('/api/dedup/status');
@@ -1187,9 +1323,11 @@
             const status = await resp.json();
             if (status.running) {
               statsSummary.textContent = `⚡ Computing perceptual hashes: ${status.processed} / ${status.total}...`;
+              if (btnCancelDedup) btnCancelDedup.style.display = 'inline-block';
             } else {
               clearInterval(dedupPollTimer);
               dedupPollTimer = null;
+              if (btnCancelDedup) btnCancelDedup.style.display = 'none';
               if (currentMode === 'duplicates') {
                 visibleIndicesMap.clear();
                 viewport.scrollTop = 0;
@@ -1200,8 +1338,25 @@
         } catch (err) {
           clearInterval(dedupPollTimer);
           dedupPollTimer = null;
+          if (btnCancelDedup) btnCancelDedup.style.display = 'none';
         }
       }, 1000);
+    }
+
+    if (btnCancelDedup) {
+      btnCancelDedup.onclick = async () => {
+        btnCancelDedup.disabled = true;
+        btnCancelDedup.textContent = 'Cancelling...';
+        try {
+          await apiFetch('/api/dedup/compute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cancel: true })
+          });
+        } catch (err) {
+          console.error('Cancel dedup error:', err);
+        }
+      };
     }
 
     async function updateVirtualGrid() {
@@ -1256,14 +1411,13 @@
       const fetchSeq = ++currentFetchSeq;
       const reqMode = currentMode;
 
-      const isPersonal = currentFilterType === 'personal';
-      const mediaType = isPersonal ? '' : currentFilterType;
-
       if (currentMode === 'browse') {
+        if (dedupTruncatedBanner) dedupTruncatedBanner.style.display = 'none';
+
         const queryParams = new URLSearchParams({
           q: currentSearch,
-          type: mediaType,
-          preset: isPersonal ? 'personal' : '',
+          type: currentFilterType,
+          preset: isPersonalActive ? 'personal' : '',
           sort: currentSortField,
           order: currentSortOrder,
           offset: offset.toString(),
@@ -1300,8 +1454,9 @@
         // Duplicates Mode
         const queryParams = new URLSearchParams({
           q: currentSearch,
-          type: mediaType,
-          preset: isPersonal ? 'personal' : '',
+          type: currentFilterType,
+          preset: isPersonalActive ? 'personal' : '',
+          sort: currentDedupSort,
           threshold: currentThreshold.toString(),
           offset: offset.toString(),
           limit: Math.max(limit, 50).toString(),
@@ -1319,6 +1474,10 @@
             totalItemCount = data.totalClusters || 0;
             const duplicateCount = data.totalDuplicates || 0;
             const reclaimable = data.totalReclaimableSize || 0;
+
+            if (dedupTruncatedBanner) {
+              dedupTruncatedBanner.style.display = data.truncated ? 'flex' : 'none';
+            }
 
             if (data.computing) {
               statsSummary.textContent = `Computing perceptual hashes... (${data.hashedItems}/${data.totalItems} done)`;
@@ -1510,16 +1669,23 @@
       }
     }
 
+    function updateLightboxNavButtons() {
+      if (btnPrev) btnPrev.disabled = (activeLightboxIndex <= 0);
+      if (btnNext) btnNext.disabled = (activeLightboxIndex >= totalItemCount - 1);
+    }
+
     // Lightbox Standard Controls
     function openLightbox(item, index) {
       activeCluster = null;
       activeLightboxItem = item;
       activeLightboxIndex = index;
+      updateLightboxNavButtons();
 
       comparisonTabs.style.display = 'none';
       clusterVariantsGroup.style.display = 'none';
       curtainContainer.style.display = 'none';
       sideBySideContainer.style.display = 'none';
+      blinkContainer.style.display = 'none';
       blinkIndicator.style.display = 'none';
 
       lightboxTitle.textContent = item.name;
@@ -1529,7 +1695,7 @@
       metaDate.textContent = formatDate(item.modTime);
       metaType.textContent = (item.mediaType === 2 ? 'Video' : 'Image') + ' (' + item.ext + ')';
 
-      const mediaUrl = `/api/media?id=${item.id}&token=${sessionToken}`;
+      const mediaUrl = (item.mediaType === 2) ? `/api/media?id=${item.id}&token=${sessionToken}` : getMediaDisplayUrl(item);
 
       if (item.mediaType === 2) {
         lightboxImg.style.display = 'none';
@@ -1558,6 +1724,7 @@
       activeCluster = cluster;
       activeLightboxIndex = index;
       activeVariantIndex = 0;
+      updateLightboxNavButtons();
 
       lightboxTitle.textContent = `Cluster #${cluster.id} • ${cluster.count} Copies (Save ${formatBytes(cluster.reclaimableSize)})`;
       comparisonTabs.style.display = 'inline-flex';
@@ -1638,8 +1805,8 @@
       const dup = activeCluster.duplicates[activeVariantIndex];
 
       const isVideo = primary.mediaType === 2 || dup.mediaType === 2;
-      const primaryUrl = isVideo ? `/api/thumbnail?id=${primary.id}&size=800&token=${sessionToken}` : `/api/media?id=${primary.id}&token=${sessionToken}`;
-      const dupUrl = isVideo ? `/api/thumbnail?id=${dup.id}&size=800&token=${sessionToken}` : `/api/media?id=${dup.id}&token=${sessionToken}`;
+      const primaryUrl = isVideo ? `/api/thumbnail?id=${primary.id}&size=800&token=${sessionToken}` : getMediaDisplayUrl(primary);
+      const dupUrl = isVideo ? `/api/thumbnail?id=${dup.id}&size=800&token=${sessionToken}` : getMediaDisplayUrl(dup);
 
       lightboxVideo.style.display = 'none';
       videoFallbackBanner.style.display = 'none';
@@ -1648,6 +1815,7 @@
         lightboxImg.style.display = 'none';
         sideBySideContainer.style.display = 'none';
         blinkIndicator.style.display = 'none';
+        blinkContainer.style.display = 'none';
         curtainContainer.style.display = 'flex';
 
         curtainBgImg.src = primaryUrl;
@@ -1657,6 +1825,7 @@
       } else if (activeComparisonMode === 'sidebyside') {
         lightboxImg.style.display = 'none';
         curtainContainer.style.display = 'none';
+        blinkContainer.style.display = 'none';
         blinkIndicator.style.display = 'none';
         sideBySideContainer.style.display = 'flex';
 
@@ -1669,16 +1838,20 @@
       } else if (activeComparisonMode === 'blink') {
         curtainContainer.style.display = 'none';
         sideBySideContainer.style.display = 'none';
-        lightboxImg.style.display = 'block';
+        lightboxImg.style.display = 'none';
+        blinkContainer.style.display = 'flex';
         blinkIndicator.style.display = 'flex';
 
         isBlinkToggled = false;
-        lightboxImg.src = primaryUrl;
+        blinkBaseImg.src = primaryUrl;
+        blinkTopImg.src = dupUrl;
+        blinkTopImg.style.opacity = '0';
         blinkLabel.textContent = `Primary: ${primary.name} (${formatBytes(primary.size)})`;
 
       } else if (activeComparisonMode === 'single') {
         curtainContainer.style.display = 'none';
         sideBySideContainer.style.display = 'none';
+        blinkContainer.style.display = 'none';
         blinkIndicator.style.display = 'none';
         lightboxImg.style.display = 'block';
         lightboxImg.src = dupUrl;
@@ -1691,15 +1864,11 @@
       const primary = activeCluster.primary;
       const dup = activeCluster.duplicates[activeVariantIndex];
 
-      const isVideo = primary.mediaType === 2 || dup.mediaType === 2;
-      const primaryUrl = isVideo ? `/api/thumbnail?id=${primary.id}&size=800&token=${sessionToken}` : `/api/media?id=${primary.id}&token=${sessionToken}`;
-      const dupUrl = isVideo ? `/api/thumbnail?id=${dup.id}&size=800&token=${sessionToken}` : `/api/media?id=${dup.id}&token=${sessionToken}`;
+      blinkTopImg.style.opacity = isBlinkToggled ? '1' : '0';
 
       if (isBlinkToggled) {
-        lightboxImg.src = dupUrl;
         blinkLabel.textContent = `Variant: ${dup.name} (${formatBytes(dup.size)})`;
       } else {
-        lightboxImg.src = primaryUrl;
         blinkLabel.textContent = `Primary: ${primary.name} (${formatBytes(primary.size)})`;
       }
     }
@@ -1714,13 +1883,14 @@
     }
 
     function syncCurtainDimensions() {
-      if (curtainBgImg.clientWidth > 0) {
+      if (curtainBgImg.clientWidth > 0 && curtainBgImg.clientHeight > 0) {
         curtainFgImg.style.width = curtainBgImg.clientWidth + 'px';
         curtainFgImg.style.height = curtainBgImg.clientHeight + 'px';
       }
     }
 
     curtainBgImg.onload = syncCurtainDimensions;
+    curtainFgImg.onload = syncCurtainDimensions;
     window.addEventListener('resize', syncCurtainDimensions);
 
     function onCurtainPointerMove(e) {
@@ -1752,6 +1922,8 @@
       lightboxImg.src = '';
       curtainBgImg.src = '';
       curtainFgImg.src = '';
+      if (blinkBaseImg) blinkBaseImg.src = '';
+      if (blinkTopImg) blinkTopImg.src = '';
       sideImgPrimary.src = '';
       sideImgDup.src = '';
       activeLightboxItem = null;
@@ -1783,6 +1955,16 @@
       }
     }
 
+    // Navigation Key Throttle (120ms)
+    let lastNavTimestamp = 0;
+    const NAV_THROTTLE_MS = 120;
+    function throttledNavigate(dir) {
+      const now = Date.now();
+      if (now - lastNavTimestamp < NAV_THROTTLE_MS) return;
+      lastNavTimestamp = now;
+      navigateLightbox(dir);
+    }
+
     // Event Listeners
     viewport.addEventListener('scroll', () => {
       requestAnimationFrame(updateVirtualGrid);
@@ -1792,6 +1974,38 @@
       updateVirtualGrid();
     });
 
+    // Sort Dropdown Mode Adapters
+    const browseSortOptions = [
+      { val: 'date-desc', label: 'Newest First' },
+      { val: 'date-asc', label: 'Oldest First' },
+      { val: 'name-asc', label: 'Name (A to Z)' },
+      { val: 'name-desc', label: 'Name (Z to A)' },
+      { val: 'size-desc', label: 'Largest First' },
+      { val: 'size-asc', label: 'Smallest First' },
+      { val: 'type-asc', label: 'File Type' }
+    ];
+
+    const dedupSortOptions = [
+      { val: 'reclaimable', label: 'Save Space (Reclaimable Size)' },
+      { val: 'count', label: 'Most Duplicates (Count)' },
+      { val: 'date_desc', label: 'Cluster Date (Newest First)' },
+      { val: 'date_asc', label: 'Cluster Date (Oldest First)' }
+    ];
+
+    function renderSortOptions() {
+      const options = currentMode === 'browse' ? browseSortOptions : dedupSortOptions;
+      sortSelect.innerHTML = '';
+      options.forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt.val;
+        o.textContent = opt.label;
+        if (currentMode === 'browse' && opt.val === `${currentSortField}-${currentSortOrder}`) o.selected = true;
+        if (currentMode === 'duplicates' && opt.val === currentDedupSort) o.selected = true;
+        sortSelect.appendChild(o);
+      });
+      sortSelect.style.display = 'inline-block';
+    }
+
     // Mode Switchers
     btnModeBrowse.onclick = () => {
       if (currentMode === 'browse') return;
@@ -1799,7 +2013,8 @@
       btnModeBrowse.classList.add('active');
       btnModeDuplicates.classList.remove('active');
       dedupControls.style.display = 'none';
-      sortSelect.style.display = 'inline-block';
+      if (dedupTruncatedBanner) dedupTruncatedBanner.style.display = 'none';
+      renderSortOptions();
       visibleIndicesMap.clear();
       viewport.scrollTop = 0;
       fetchRange(0, 100);
@@ -1811,7 +2026,7 @@
       btnModeDuplicates.classList.add('active');
       btnModeBrowse.classList.remove('active');
       dedupControls.style.display = 'flex';
-      sortSelect.style.display = 'none'; // Duplicates are sorted by reclaimable space descending
+      renderSortOptions();
       visibleIndicesMap.clear();
       viewport.scrollTop = 0;
       fetchRange(0, 50, true);
@@ -1842,9 +2057,36 @@
       });
     });
 
-    // Search Input (50ms debounce)
+    // Personal Toggle Modifier
+    if (btnTogglePersonal) {
+      btnTogglePersonal.onclick = () => {
+        isPersonalActive = !isPersonalActive;
+        btnTogglePersonal.classList.toggle('active', isPersonalActive);
+        visibleIndicesMap.clear();
+        viewport.scrollTop = 0;
+        fetchRange(0, currentMode === 'browse' ? 100 : 50, currentMode === 'duplicates');
+      };
+    }
+
+    // Search Input (50ms debounce) & Clear Button
+    function clearSearchInput() {
+      searchInput.value = '';
+      currentSearch = '';
+      if (btnSearchClear) btnSearchClear.style.display = 'none';
+      visibleIndicesMap.clear();
+      viewport.scrollTop = 0;
+      fetchRange(0, currentMode === 'browse' ? 100 : 50, currentMode === 'duplicates');
+    }
+
+    if (btnSearchClear) {
+      btnSearchClear.onclick = clearSearchInput;
+    }
+
     let searchDebounce = null;
     searchInput.addEventListener('input', (e) => {
+      if (btnSearchClear) {
+        btnSearchClear.style.display = e.target.value ? 'flex' : 'none';
+      }
       clearTimeout(searchDebounce);
       searchDebounce = setTimeout(() => {
         currentSearch = e.target.value.trim();
@@ -1854,14 +2096,28 @@
       }, 50);
     });
 
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && searchInput.value) {
+        e.stopPropagation();
+        clearSearchInput();
+      }
+    });
+
     // Sort Dropdown
     sortSelect.addEventListener('change', (e) => {
-      const parts = e.target.value.split('-');
-      currentSortField = parts[0];
-      currentSortOrder = parts[1];
-      visibleIndicesMap.clear();
-      viewport.scrollTop = 0;
-      fetchRange(0, 100);
+      if (currentMode === 'browse') {
+        const parts = e.target.value.split('-');
+        currentSortField = parts[0];
+        currentSortOrder = parts[1];
+        visibleIndicesMap.clear();
+        viewport.scrollTop = 0;
+        fetchRange(0, 100);
+      } else {
+        currentDedupSort = e.target.value;
+        visibleIndicesMap.clear();
+        viewport.scrollTop = 0;
+        fetchRange(0, 50, false);
+      }
     });
 
     // Slider
@@ -1879,8 +2135,8 @@
 
     // Lightbox Buttons
     document.getElementById('btnCloseLightbox').onclick = closeLightbox;
-    document.getElementById('btnPrev').onclick = () => navigateLightbox(-1);
-    document.getElementById('btnNext').onclick = () => navigateLightbox(1);
+    btnPrev.onclick = () => throttledNavigate(-1);
+    btnNext.onclick = () => throttledNavigate(1);
 
     document.getElementById('btnReveal').onclick = async () => {
       if (!activeLightboxItem) return;
@@ -1923,8 +2179,8 @@
     window.addEventListener('keydown', (e) => {
       if (lightbox.classList.contains('active')) {
         if (e.key === 'Escape') closeLightbox();
-        if (e.key === 'ArrowLeft') navigateLightbox(-1);
-        if (e.key === 'ArrowRight') navigateLightbox(1);
+        if (e.key === 'ArrowLeft') throttledNavigate(-1);
+        if (e.key === 'ArrowRight') throttledNavigate(1);
         if (e.key === ' ' && activeComparisonMode === 'blink') {
           e.preventDefault();
           toggleBlink();
@@ -1934,6 +2190,7 @@
 
     // Init
     initAuth().then(() => {
+      renderSortOptions();
       setInterval(pollStatus, 1000);
       pollStatus();
       fetchRange(0, 100);

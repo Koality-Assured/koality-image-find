@@ -139,3 +139,50 @@ func TestClusterItems(t *testing.T) {
 		t.Errorf("PaginateClusters result mismatch: %+v", res)
 	}
 }
+
+func TestSortClusters(t *testing.T) {
+	c1 := Cluster{
+		ID:              1,
+		Count:           2,
+		ReclaimableSize: 100,
+		Primary:         indexer.ItemView{ID: 10, ModTime: 1000},
+	}
+	c2 := Cluster{
+		ID:              2,
+		Count:           5,
+		ReclaimableSize: 50,
+		Primary:         indexer.ItemView{ID: 20, ModTime: 3000},
+	}
+	c3 := Cluster{
+		ID:              3,
+		Count:           3,
+		ReclaimableSize: 200,
+		Primary:         indexer.ItemView{ID: 30, ModTime: 2000},
+	}
+
+	clusters := []Cluster{c1, c2, c3}
+
+	// Sort by reclaimable descending
+	SortClusters(clusters, "reclaimable")
+	if clusters[0].ID != 1 || clusters[0].ReclaimableSize != 200 {
+		t.Errorf("Expected first cluster to have reclaimable 200, got %d", clusters[0].ReclaimableSize)
+	}
+
+	// Sort by count descending
+	SortClusters(clusters, "count")
+	if clusters[0].Count != 5 {
+		t.Errorf("Expected first cluster to have count 5, got %d", clusters[0].Count)
+	}
+
+	// Sort by date_asc
+	SortClusters(clusters, "date_asc")
+	if clusters[0].Primary.ModTime != 1000 {
+		t.Errorf("Expected first cluster to have ModTime 1000, got %d", clusters[0].Primary.ModTime)
+	}
+
+	// Sort by date_desc
+	SortClusters(clusters, "date_desc")
+	if clusters[0].Primary.ModTime != 3000 {
+		t.Errorf("Expected first cluster to have ModTime 3000, got %d", clusters[0].Primary.ModTime)
+	}
+}
