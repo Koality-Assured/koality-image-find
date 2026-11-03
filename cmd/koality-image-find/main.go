@@ -178,7 +178,12 @@ func main() {
 	}
 	defer srv.Close()
 
+	// Generate an ephemeral, single-use bootstrap ticket for launching the browser process
+	// to protect the master 256-bit session token from OS process table inspection (marcus-01).
+	ticket := srv.CreateBootstrapTicket()
+	desktopLaunchURL := fmt.Sprintf("%s/?ticket=%s", serverURL, ticket)
 	appURL := fmt.Sprintf("%s/?token=%s", serverURL, srv.Token())
+
 	log.Println("==================================================")
 	log.Printf("  Viewer LIVE: %s\n", appURL)
 	log.Println("==================================================")
@@ -186,9 +191,9 @@ func main() {
 	// Kick off initial file scan
 	startScan(roots)
 
-	// Launch desktop window
+	// Launch desktop window with ephemeral bootstrap ticket
 	if !noBrowserFlag {
-		launchDesktopWindow(appURL)
+		launchDesktopWindow(desktopLaunchURL)
 	}
 
 	// Wait for OS shutdown signals

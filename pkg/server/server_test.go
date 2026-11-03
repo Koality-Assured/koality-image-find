@@ -191,3 +191,86 @@ func TestServerAuthAndEndpoints(t *testing.T) {
 		t.Errorf("Expected 2 personal items, got %d", personalPage.TotalCount)
 	}
 }
+
+
+func TestBootstrapTicketAndJSONErrors(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "srv_ticket_test_*")
+	if err != nil {
+		t.Fatalf("MkdirTemp failed: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	idx := indexer.New()
+	idx.Add([]scanner.MediaFile{
+		{
+			Path:      filepath.Join(tempDir, "vector.svg"),
+			Name:      "vector.svg",
+			Ext:       ".svg",
+			MediaType: scanner.MediaTypeImage,
+			Size:      100,
+			ModTime:   1700000000,
+		},
+	})
+	c, _ := cache.Open(filepath.Join(tempDir, "cache"), 10)
+	defer c.Close()
+	pipeline := thumb.NewPipeline(c)
+
+	srv := New(ServerConfig{
+		Indexer:  idx,
+		Pipeline: pipeline,
+	})
+	serverURL, err := srv.Start()
+	if err != nil {
+		t.Fatalf("Server start failed: %v", err)
+	}
+	defer srv.Close()
+
+	// 1. Test Bootstrap Ticket creation & exchange
+	ticket := srv.CreateBootstrapTicket()
+	if ticket == "" {
+		t.Fatal("Expected non-empty ticket")
+	}
+
+	resp, err := http.Get(serverURL + "/api/auth/bootstrap?ticket=" + ticket)
+	if err != nil {
+		t.Fatalf("Bootstrap request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 OK from bootstrap, got %d", resp.StatusCode)
+	}
+	var tokenPayload map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&tokenPayload)
+	resp.Body.Close()
+	if tokenPayload["token"] != srv.Token() {
+		t.Fatalf("Expected token %s, got %s", srv.Token(), tokenPayload["token"])
+	}
+
+	// 2. Single-use check: ticket should now be consumed
+	respSecond, err := http.Get(serverURL + "/api/auth/bootstrap?ticket=" + ticket)
+	if err != nil {
+		t.Fatalf("Second bootstrap request failed: %v", err)
+	}
+	if respSecond.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected 401 Unauthorized for used ticket, got %d", respSecond.StatusCode)
+	}
+	respSecond.Body.Close()
+
+	// 3. Negative ID parameter returns application/json error
+	req, _ := http.NewRequest("GET", serverURL+"/api/thumbnail?id=-1", nil)
+	req.Header.Set("X-Session-Token", srv.Token())
+	respThumb, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Thumb request failed: %v", err)
+	}
+	defer respThumb.Body.Close()
+	if respThumb.StatusCode != http.StatusBadRequest {
+		t.Errorf("Expected 400 Bad Request, got %d", respThumb.StatusCode)
+	}
+	if respThumb.Header.Get("Content-Type") != "application/json" {
+		t.Errorf("Expected application/json, got %s", respThumb.Header.Get("Content-Type"))
+	}
+	var errObj map[string]string
+	if err := json.NewDecoder(respThumb.Body).Decode(&errObj); err != nil || errObj["error"] == "" {
+		t.Errorf("Expected structured JSON error object, got %+v (err: %v)", errObj, err)
+	}
+}

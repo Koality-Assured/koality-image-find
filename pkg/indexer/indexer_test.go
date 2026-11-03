@@ -121,3 +121,26 @@ func BenchmarkIndexerSearch100k(b *testing.B) {
 		}
 	}
 }
+
+
+func TestIndexerUnicodeSearch(t *testing.T) {
+	idx := New()
+	files := []scanner.MediaFile{
+		{Path: `C:\Photos\Élan_2026.jpg`, Name: `Élan_2026.jpg`, Ext: `.jpg`, MediaType: scanner.MediaTypeImage, Size: 1024, ModTime: 1700000000},
+		{Path: `C:\Photos\münchen_travel.png`, Name: `münchen_travel.png`, Ext: `.png`, MediaType: scanner.MediaTypeImage, Size: 2048, ModTime: 1700000100},
+		{Path: `C:\Photos\standard.jpg`, Name: `standard.jpg`, Ext: `.jpg`, MediaType: scanner.MediaTypeImage, Size: 3072, ModTime: 1700000200},
+	}
+	idx.Add(files)
+
+	// Test lowercase query matching uppercase accented char
+	page1 := idx.GetPage(Query{SearchText: "élan"}, SortConfig{}, 0, 10)
+	if page1.TotalCount != 1 {
+		t.Fatalf("Expected 1 match for 'élan', got %d", page1.TotalCount)
+	}
+
+	// Test uppercase query matching lowercase umlaut char
+	page2 := idx.GetPage(Query{SearchText: "MÜNCHEN"}, SortConfig{}, 0, 10)
+	if page2.TotalCount != 1 {
+		t.Fatalf("Expected 1 match for 'MÜNCHEN', got %d", page2.TotalCount)
+	}
+}

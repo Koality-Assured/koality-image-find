@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,6 +53,10 @@ type Server struct {
 	dedupProcessed atomic.Int64
 	dedupCancel    context.CancelFunc
 	dedupWg        sync.WaitGroup
+
+	// Ephemeral 1-time bootstrap tickets
+	ticketMu sync.Mutex
+	tickets  map[string]time.Time
 }
 
 // GenerateSessionToken creates a cryptographically secure 256-bit token.
@@ -66,8 +72,9 @@ func New(config ServerConfig) *Server {
 		config.SessionToken = GenerateSessionToken()
 	}
 	s := &Server{
-		config: config,
-		token:  config.SessionToken,
+		config:  config,
+		token:   config.SessionToken,
+		tickets: make(map[string]time.Time),
 	}
 	return s
 }
@@ -75,6 +82,25 @@ func New(config ServerConfig) *Server {
 // Token returns the session token.
 func (s *Server) Token() string {
 	return s.token
+}
+
+// CreateBootstrapTicket generates a short-lived, single-use ticket for UI authentication.
+func (s *Server) CreateBootstrapTicket() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	ticket := hex.EncodeToString(b)
+
+	s.ticketMu.Lock()
+	defer s.ticketMu.Unlock()
+	s.tickets[ticket] = time.Now().Add(30 * time.Second)
+	return ticket
+}
+
+// writeJSONError writes a JSON formatted error response.
+func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // Start binds to an available port on 127.0.0.1 and begins serving requests.
@@ -88,6 +114,7 @@ func (s *Server) Start() (string, error) {
 	mux := http.NewServeMux()
 
 	// API routes
+	mux.HandleFunc("/api/auth/bootstrap", s.handleBootstrap)
 	mux.HandleFunc("/api/status", s.authMiddleware(s.handleStatus))
 	mux.HandleFunc("/api/scan", s.authMiddleware(s.handleScan))
 	mux.HandleFunc("/api/items", s.authMiddleware(s.handleItems))
@@ -134,6 +161,30 @@ func (s *Server) Close() error {
 	return nil
 }
 
+
+func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
+	ticket := r.URL.Query().Get("ticket")
+	if ticket == "" {
+		writeJSONError(w, "missing ticket parameter", http.StatusBadRequest)
+		return
+	}
+
+	s.ticketMu.Lock()
+	exp, exists := s.tickets[ticket]
+	if exists {
+		delete(s.tickets, ticket)
+	}
+	s.ticketMu.Unlock()
+
+	if !exists || time.Now().After(exp) {
+		writeJSONError(w, "invalid or expired bootstrap ticket", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"token": s.token})
+}
+
 // authMiddleware enforces the 256-bit session token and checks loopback origins.
 func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -143,8 +194,8 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			reqToken = r.URL.Query().Get("token")
 		}
 
-		if reqToken == "" || reqToken != s.token {
-			http.Error(w, `{"error":"unauthorized: invalid session token"}`, http.StatusUnauthorized)
+		if reqToken == "" || subtle.ConstantTimeCompare([]byte(reqToken), []byte(s.token)) != 1 {
+			writeJSONError(w, "unauthorized: invalid session token", http.StatusUnauthorized)
 			return
 		}
 
@@ -154,7 +205,7 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			host = r.Host
 		}
 		if host != "127.0.0.1" && host != "localhost" && host != "[::1]" {
-			http.Error(w, `{"error":"forbidden: host not allowed"}`, http.StatusForbidden)
+			writeJSONError(w, "forbidden: host not allowed", http.StatusForbidden)
 			return
 		}
 
@@ -163,7 +214,7 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		if origin != "" {
 			u, err := url.Parse(origin)
 			if err != nil || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost" && u.Hostname() != "::1") {
-				http.Error(w, `{"error":"forbidden: origin not allowed"}`, http.StatusForbidden)
+				writeJSONError(w, "forbidden: origin not allowed", http.StatusForbidden)
 				return
 			}
 		}
@@ -198,7 +249,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSONError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -206,7 +257,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Roots []string `json:"roots"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -282,20 +333,20 @@ func (s *Server) handleThumbnail(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id64, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil || id64 == 0 {
-		http.Error(w, "invalid id parameter", http.StatusBadRequest)
+		writeJSONError(w, "invalid id parameter", http.StatusBadRequest)
 		return
 	}
 
 	id := uint32(id64)
 	item, found := s.config.Indexer.GetByID(id)
 	if !found {
-		http.Error(w, "item not found in index", http.StatusNotFound)
+		writeJSONError(w, "item not found in index", http.StatusNotFound)
 		return
 	}
 
 	// Security: Prevent full media streaming if cloud placeholder to prevent accidental downloads
 	if item.IsCloud {
-		http.Error(w, "cloud placeholder media cannot be streamed without hydration", http.StatusGone)
+		writeJSONError(w, "cloud placeholder media cannot be streamed without hydration", http.StatusGone)
 		return
 	}
 
@@ -307,13 +358,13 @@ func (s *Server) handleThumbnail(w http.ResponseWriter, r *http.Request) {
 
 	// Security: Prevent thumbnail generation if cloud placeholder
 	if item.IsCloud {
-		http.Error(w, "cloud placeholder thumbnail not available", http.StatusGone)
+		writeJSONError(w, "cloud placeholder thumbnail not available", http.StatusGone)
 		return
 	}
 
 	thumbData, mimeType, err := s.config.Pipeline.GetThumbnail(item.Path, item.MediaType, item.Size, item.ModTime, targetSize)
 	if err != nil || len(thumbData) == 0 {
-		http.Error(w, "thumbnail generation failed: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "thumbnail generation failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -327,20 +378,20 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id64, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil || id64 == 0 {
-		http.Error(w, "invalid id parameter", http.StatusBadRequest)
+		writeJSONError(w, "invalid id parameter", http.StatusBadRequest)
 		return
 	}
 
 	id := uint32(id64)
 	item, found := s.config.Indexer.GetByID(id)
 	if !found {
-		http.Error(w, "item not found in index", http.StatusNotFound)
+		writeJSONError(w, "item not found in index", http.StatusNotFound)
 		return
 	}
 
 	// Security: Prevent full media streaming if cloud placeholder to prevent accidental downloads
 	if item.IsCloud {
-		http.Error(w, "cloud placeholder media cannot be streamed without hydration", http.StatusGone)
+		writeJSONError(w, "cloud placeholder media cannot be streamed without hydration", http.StatusGone)
 		return
 	}
 
@@ -348,14 +399,14 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	cleanPath := filepath.Clean(item.Path)
 	file, err := os.Open(winapi.ToExtendedPath(cleanPath))
 	if err != nil {
-		http.Error(w, "file unreadable", http.StatusNotFound)
+		writeJSONError(w, "file unreadable", http.StatusNotFound)
 		return
 	}
 	defer file.Close()
 
 	fi, err := file.Stat()
 	if err != nil {
-		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		writeJSONError(w, "failed to stat file", http.StatusInternalServerError)
 		return
 	}
 
@@ -365,7 +416,7 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleActionReveal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSONError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -373,19 +424,19 @@ func (s *Server) handleActionReveal(w http.ResponseWriter, r *http.Request) {
 		ID uint32 `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	item, found := s.config.Indexer.GetByID(req.ID)
 	if !found {
-		http.Error(w, "item not found", http.StatusNotFound)
+		writeJSONError(w, "item not found", http.StatusNotFound)
 		return
 	}
 
 	err := winapi.OpenFolderAndSelectItem(item.Path)
 	if err != nil {
-		http.Error(w, "reveal failed: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "reveal failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -395,7 +446,7 @@ func (s *Server) handleActionReveal(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleActionOpen(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSONError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -403,26 +454,32 @@ func (s *Server) handleActionOpen(w http.ResponseWriter, r *http.Request) {
 		ID uint32 `json:"id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	item, found := s.config.Indexer.GetByID(req.ID)
 	if !found {
-		http.Error(w, "item not found", http.StatusNotFound)
+		writeJSONError(w, "item not found", http.StatusNotFound)
 		return
 	}
 
 	// Security: Whitelist allowed media types only before executing
 	mediaType, _ := scanner.ClassifyExtension(item.Ext)
 	if mediaType != scanner.MediaTypeImage && mediaType != scanner.MediaTypeVideo {
-		http.Error(w, "prohibited file type", http.StatusForbidden)
+		writeJSONError(w, "prohibited file type", http.StatusForbidden)
+		return
+	}
+
+	// Security: Prevent direct ShellExecute of SVG to eliminate local script execution risk
+	if strings.EqualFold(item.Ext, ".svg") {
+		writeJSONError(w, "prohibited action: direct execution of SVG files is blocked for security", http.StatusForbidden)
 		return
 	}
 
 	err := winapi.ShellExecute(0, "open", item.Path, "", "", 1)
 	if err != nil {
-		http.Error(w, "open failed: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "open failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -646,7 +703,7 @@ func (s *Server) startBackgroundHashing(items []indexer.ItemView, unhashed []int
 
 func (s *Server) handleDedupCompute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSONError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
