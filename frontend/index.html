@@ -1005,9 +1005,45 @@
   </div>
 
   <script>
-    // Extract session token from URL
+    // Extract session token from URL, hash, or sessionStorage
     const urlParams = new URLSearchParams(window.location.search);
-    const sessionToken = urlParams.get('token') || '';
+    let sessionToken = urlParams.get('token') || (window.location.hash.startsWith('#token=') ? window.location.hash.substring(7) : '') || sessionStorage.getItem('koality_token') || '';
+
+    function showAuthErrorBanner() {
+      let banner = document.getElementById('authErrorBanner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'authErrorBanner';
+        banner.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;padding:12px 24px;border-radius:8px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.5);z-index:99999;font-size:14px;';
+        banner.textContent = '⚠️ Authentication Required: Missing or invalid session token. Please launch via koality-image-find.exe';
+        document.body.appendChild(banner);
+      }
+      banner.style.display = 'block';
+    }
+
+    async function initAuth() {
+      const ticket = urlParams.get('ticket');
+      if (ticket) {
+        try {
+          const resp = await fetch(`/api/auth/bootstrap?ticket=${encodeURIComponent(ticket)}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.token) {
+              sessionToken = data.token;
+              sessionStorage.setItem('koality_token', sessionToken);
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          }
+        } catch (e) {
+          console.error("Bootstrap ticket exchange failed:", e);
+        }
+      }
+      if (sessionToken) {
+        sessionStorage.setItem('koality_token', sessionToken);
+      } else {
+        showAuthErrorBanner();
+      }
+    }
 
     // State
     let currentMode = 'browse'; // 'browse' | 'duplicates'
@@ -1113,7 +1149,16 @@
       const headers = options.headers || {};
       headers['X-Session-Token'] = sessionToken;
       options.headers = headers;
-      return fetch(endpoint, options);
+      try {
+        const resp = await fetch(endpoint, options);
+        if (resp.status === 401) {
+          showAuthErrorBanner();
+        }
+        return resp;
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        throw err;
+      }
     }
 
     // Mathematical O(1) Virtual Grid Layout Math
@@ -1128,6 +1173,7 @@
     }
 
     let isFetching = false;
+    let activeAbortController = null;
     let pendingFetchTimeout = null;
     let currentFetchSeq = 0;
     let dedupPollTimer = null;
@@ -1199,8 +1245,13 @@
     }
 
     async function fetchRange(offset, limit, forceCompute = false) {
-      if (isFetching) return;
+      if (isFetching) {
+        if (activeAbortController) activeAbortController.abort();
+        isFetching = false;
+      }
       isFetching = true;
+      activeAbortController = new AbortController();
+      const signal = activeAbortController.signal;
 
       const fetchSeq = ++currentFetchSeq;
       const reqMode = currentMode;
@@ -1221,7 +1272,7 @@
         });
 
         try {
-          const resp = await apiFetch(`/api/items?${queryParams}`);
+          const resp = await apiFetch(`/api/items?${queryParams}`, { signal });
           if (resp.ok) {
             // Discard stale in-flight response if mode switched
             if (fetchSeq !== currentFetchSeq || reqMode !== currentMode) return;
@@ -1259,7 +1310,7 @@
         });
 
         try {
-          const resp = await apiFetch(`/api/duplicates?${queryParams}`);
+          const resp = await apiFetch(`/api/duplicates?${queryParams}`, { signal });
           if (resp.ok) {
             // Discard stale in-flight response if mode switched
             if (fetchSeq !== currentFetchSeq || reqMode !== currentMode) return;
@@ -1448,8 +1499,9 @@
             scanStatusText.textContent = `Scanning drive... (${stats.imagesFound.toLocaleString()} images, ${stats.videosFound.toLocaleString()} videos)`;
           }
 
-          if (totalItemCount === 0 && stats.totalIndexed > 0 && currentMode === 'browse') {
+          if (currentMode === 'browse' && stats.totalIndexed > totalItemCount && !currentSearch) {
             totalItemCount = stats.totalIndexed;
+            statsSummary.textContent = `${totalItemCount.toLocaleString()} items`;
             updateVirtualGrid();
           }
         }
@@ -1881,9 +1933,11 @@
     });
 
     // Init
-    setInterval(pollStatus, 1000);
-    pollStatus();
-    fetchRange(0, 100);
+    initAuth().then(() => {
+      setInterval(pollStatus, 1000);
+      pollStatus();
+      fetchRange(0, 100);
+    });
   </script>
 </body>
 </html>

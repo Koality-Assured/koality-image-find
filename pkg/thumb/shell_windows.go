@@ -138,7 +138,15 @@ var (
 // GetShellPool returns the global STA shell worker pool.
 func GetShellPool() *ShellWorkerPool {
 	poolOnce.Do(func() {
-		defaultPool = NewShellWorkerPool(2) // 2 STA workers to avoid shell lock contention
+		// Adaptive worker scaling: allocate between 2 and 4 workers based on CPU topology
+		// to prevent starvation DoS while limiting COM apartment contention.
+		numWorkers := runtime.NumCPU() / 2
+		if numWorkers < 2 {
+			numWorkers = 2
+		} else if numWorkers > 4 {
+			numWorkers = 4
+		}
+		defaultPool = NewShellWorkerPool(numWorkers)
 	})
 	return defaultPool
 }

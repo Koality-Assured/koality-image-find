@@ -240,6 +240,25 @@ func (idx *Indexer) GetByPath(path string) (ItemView, bool) {
 	}, true
 }
 
+// isASCII tests whether b contains only 7-bit ASCII characters.
+func isASCII(b []byte) bool {
+	for i := 0; i < len(b); i++ {
+		if b[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
+// containsFold tests whether substr is within s case-insensitively, using zero-allocation
+// ASCII folding when possible, and falling back to Unicode-aware lowercasing for non-ASCII strings.
+func containsFold(s, substr []byte) bool {
+	if isASCII(s) && isASCII(substr) {
+		return containsFoldASCII(s, substr)
+	}
+	return strings.Contains(strings.ToLower(string(s)), strings.ToLower(string(substr)))
+}
+
 // containsFoldASCII tests whether substr is within s case-insensitively with ZERO heap allocations.
 func containsFoldASCII(s, substr []byte) bool {
 	if len(substr) == 0 {
@@ -368,9 +387,9 @@ func (idx *Indexer) searchAndSortLocked(q Query, s SortConfig) []uint32 {
 				// Search substring filter (zero allocation!)
 				if len(searchBytes) > 0 {
 					nameBytes := idx.stringPool[r.NameOffset : r.NameOffset+uint32(r.NameLen)]
-					if !containsFoldASCII(nameBytes, searchBytes) {
+					if !containsFold(nameBytes, searchBytes) {
 						pathBytes := idx.stringPool[r.PathOffset : r.PathOffset+uint32(r.PathLen)]
-						if !containsFoldASCII(pathBytes, searchBytes) {
+						if !containsFold(pathBytes, searchBytes) {
 							continue
 						}
 					}
