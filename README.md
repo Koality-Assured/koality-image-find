@@ -13,7 +13,7 @@
 [![CI](https://github.com/Koality-Assured/koality-image-find/actions/workflows/ci.yml/badge.svg)](https://github.com/Koality-Assured/koality-image-find/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go 1.23+ (CGO=0)](https://img.shields.io/badge/Go-1.23+_(CGO=0)-00ADD8.svg)](go.mod)
-[![Domain: Desktop-Media](https://img.shields.io/badge/domain-desktop-media-blueviolet.svg)]()
+[![Domain: Desktop-Media](https://img.shields.io/badge/domain-desktop--media-blueviolet.svg)](#)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://conventionalcommits.org)
 
 </div>
